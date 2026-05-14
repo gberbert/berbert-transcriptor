@@ -481,15 +481,18 @@ btnCapturePhoto.addEventListener('click', async () => {
     // Exportar para Base64 (compressão JPEG 0.7)
     const base64Image = canvas.toDataURL('image/jpeg', 0.7);
     
+    // Pegar minutagem atual
+    const minutagem = timerElement.textContent;
+    
     // Exibir miniatura na UI
-    adicionarMiniatura(base64Image);
+    adicionarMiniatura(base64Image, minutagem);
     
     // Enviar para o backend
     try {
         const res = await authFetch(`/reunioes/${currentReuniaoId}/fotos`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ foto_base64: base64Image })
+            body: JSON.stringify({ foto_base64: base64Image, minutagem: minutagem })
         });
         
         if (!res.ok) throw new Error('Erro ao salvar foto no backend');
@@ -512,12 +515,33 @@ function fecharCamera() {
     cameraModal.classList.add('hidden');
 }
 
-function adicionarMiniatura(base64Src) {
+function adicionarMiniatura(base64Src, minutagem) {
     photoThumbnailsContainer.classList.remove('hidden');
+    const imgWrapper = document.createElement('div');
+    imgWrapper.style.position = 'relative';
+    imgWrapper.style.display = 'inline-block';
+    
     const img = document.createElement('img');
     img.src = base64Src;
     img.className = 'photo-thumbnail';
-    photoThumbnails.appendChild(img);
+    
+    if (minutagem) {
+        const timeLabel = document.createElement('span');
+        timeLabel.textContent = minutagem;
+        timeLabel.style.position = 'absolute';
+        timeLabel.style.bottom = '2px';
+        timeLabel.style.right = '2px';
+        timeLabel.style.background = 'rgba(0,0,0,0.7)';
+        timeLabel.style.color = '#fff';
+        timeLabel.style.fontSize = '0.6rem';
+        timeLabel.style.padding = '2px 4px';
+        timeLabel.style.borderRadius = '4px';
+        imgWrapper.appendChild(img);
+        imgWrapper.appendChild(timeLabel);
+        photoThumbnails.appendChild(imgWrapper);
+    } else {
+        photoThumbnails.appendChild(img);
+    }
 }
 
 // ==========================================

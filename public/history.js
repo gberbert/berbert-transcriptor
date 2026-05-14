@@ -151,22 +151,62 @@ function openDetail(index) {
     
     // Carregar fotos se houver
     const photosContainer = document.getElementById('detail-photos-container');
-    const photosList = document.getElementById('detail-photos');
-    photosList.innerHTML = '';
+    photosContainer.innerHTML = '';
     
     if (reuniao.fotos && reuniao.fotos.length > 0) {
         photosContainer.classList.remove('hidden');
+        
+        let lastTimeSec = 0;
+        
         reuniao.fotos.forEach(foto => {
+            // Converter minutagem "HH:MM:SS" para segundos
+            let currentTimeSec = 0;
+            if (foto.minutagem) {
+                const parts = foto.minutagem.split(':');
+                if (parts.length === 3) {
+                    currentTimeSec = parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]);
+                }
+            }
+            
+            let deltaSec = currentTimeSec - lastTimeSec;
+            if (deltaSec < 0) deltaSec = 0;
+            lastTimeSec = currentTimeSec;
+            
+            // Escala: 1 segundo = 1.5 pixels de margem. 
+            // Limitar a margem máxima para evitar buracos gigantes na tela (ex: max 150px)
+            // Margem mínima de 10px para não ficarem coladas
+            const marginTop = Math.min(Math.max(deltaSec * 1.5, 10), 150);
+            
+            const imgWrapper = document.createElement('div');
+            imgWrapper.style.position = 'relative';
+            imgWrapper.style.marginTop = `${marginTop}px`;
+            imgWrapper.style.display = 'flex';
+            imgWrapper.style.flexDirection = 'column';
+            imgWrapper.style.alignItems = 'center';
+
             const img = document.createElement('img');
             img.src = foto.base64;
             img.className = 'photo-thumbnail';
-            // Click to view full image logic (simple open in new tab or modal)
+            img.style.width = '70px';
+            img.style.height = '70px';
+            img.style.objectFit = 'cover';
+            img.style.borderRadius = '8px';
             img.style.cursor = 'pointer';
+            
             img.onclick = () => {
                 const w = window.open('');
                 w.document.write(`<img src="${foto.base64}" style="max-width: 100%;">`);
             };
-            photosList.appendChild(img);
+            
+            const timeLabel = document.createElement('span');
+            timeLabel.textContent = foto.minutagem || '--:--';
+            timeLabel.style.fontSize = '0.65rem';
+            timeLabel.style.color = 'var(--text-secondary)';
+            timeLabel.style.marginTop = '4px';
+
+            imgWrapper.appendChild(img);
+            imgWrapper.appendChild(timeLabel);
+            photosContainer.appendChild(imgWrapper); // Append to sidebar container directly
         });
     } else {
         photosContainer.classList.add('hidden');

@@ -35,6 +35,7 @@ const reuniaoSchema = new mongoose.Schema({
     titulo: String,
     fotos: [{
         base64: String,
+        minutagem: String,
         data_captura: { type: Date, default: Date.now }
     }]
 });
@@ -259,7 +260,7 @@ app.patch('/reunioes/:id/append', authMiddleware, async (req, res) => {
 app.patch('/reunioes/:id/fotos', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        const { foto_base64 } = req.body;
+        const { foto_base64, minutagem } = req.body;
 
         if (!foto_base64) {
             return res.status(400).json({ error: 'Foto não enviada.' });
@@ -267,7 +268,7 @@ app.patch('/reunioes/:id/fotos', authMiddleware, async (req, res) => {
 
         const reuniaoAtualizada = await Reuniao.findByIdAndUpdate(
             id,
-            { $push: { fotos: { base64: foto_base64 } } },
+            { $push: { fotos: { base64: foto_base64, minutagem: minutagem || '' } } },
             { new: true }
         );
 
@@ -421,12 +422,27 @@ app.post('/gerar-resumo', authMiddleware, async (req, res) => {
         });
         
         // Preparar imagens se existirem
-        const imageParts = [];
+        const promptParts = [];
+        let hasImages = false;
+
         if (reuniao.fotos && reuniao.fotos.length > 0) {
-            reuniao.fotos.forEach(foto => {
+            hasImages = true;
+            console.log(`[API] Preparando ${reuniao.fotos.length} foto(s) com minutagem para a Etapa 1.`);
+        }
+
+        const promptText = `[TRANSCRIÇÃO]:\n${transcricao}\n\n[INSTRUÇÃO]: ${hasImages ? "Analise a transcrição E AS IMAGENS EM ANEXO. Importante: Cada imagem vem acompanhada da sua 'minutagem' indicando o momento exato em que foi capturada. Descreva e correlacione as imagens com o trecho do texto correspondente àquela minutagem para extrair mais contexto. " : ""}Gere o resumo neutro e fiel agora:`;
+        
+        promptParts.push(promptText);
+
+        if (hasImages) {
+            reuniao.fotos.forEach((foto, index) => {
                 const match = foto.base64.match(/^data:(image\/[a-z]+);base64,(.+)$/);
                 if (match) {
-                    imageParts.push({
+                    // Inserir texto de contexto antes de cada imagem
+                    const minutagemInfo = foto.minutagem ? foto.minutagem : "Tempo não registrado";
+                    promptParts.push(`\n[IMAGEM ${index + 1} - CAPTURADA EM: ${minutagemInfo}]:`);
+                    // Inserir a imagem em si
+                    promptParts.push({
                         inlineData: {
                             data: match[2],
                             mimeType: match[1]
@@ -434,12 +450,8 @@ app.post('/gerar-resumo', authMiddleware, async (req, res) => {
                     });
                 }
             });
-            console.log(`[API] Anexando ${imageParts.length} foto(s) ao prompt da Etapa 1.`);
         }
 
-        const promptText = `[TRANSCRIÇÃO]:\n${transcricao}\n\n[INSTRUÇÃO]: ${imageParts.length > 0 ? "Analise a transcrição E AS IMAGENS EM ANEXO. Descreva e correlacione as imagens com o texto para extrair mais contexto. " : ""}Gere o resumo neutro e fiel agora:`;
-        
-        const promptParts = [promptText, ...imageParts];
         const resultStep1 = await modelStep1.generateContent(promptParts);
         const resumoBase = resultStep1.response.text();
 
