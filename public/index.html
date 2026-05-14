@@ -19,26 +19,28 @@
         </header>
 
         <main class="app-content">
-            <div id="status" class="status-indicator">Pronto para iniciar</div>
-            
-            <div class="timer-display" id="timer">00:00:00</div>
+            <div class="recording-top-area">
+                <div id="status" class="status-indicator">Pronto para iniciar</div>
+                
+                <div class="timer-display" id="timer">00:00:00</div>
 
-            <div class="record-button-container">
-                <button id="startBtn" class="record-button main-action">
-                    <span class="icon">🎙️</span>
-                </button>
-            </div>
+                <div class="record-button-container">
+                    <button id="startBtn" class="record-button main-action">
+                        <span class="icon">🎙️</span>
+                    </button>
+                </div>
 
-            <div id="mainControls" class="controls-row">
-                <button id="stopBtn" class="btn secondary stop-btn" disabled>Parar</button>
+                <div id="mainControls" class="controls-row">
+                    <button id="stopBtn" class="btn secondary stop-btn" disabled>Parar</button>
+                </div>
+                
+                <div id="postRecordControls" class="controls-row hidden">
+                    <button id="continueBtn" class="btn secondary">Continuar</button>
+                    <button id="saveBtn" class="btn primary">Salvar</button>
+                </div>
+                
+                <p id="statusText" class="status-text">Toque no microfone para iniciar.</p>
             </div>
-            
-            <div id="postRecordControls" class="controls-row hidden">
-                <button id="continueBtn" class="btn secondary">Continuar</button>
-                <button id="saveBtn" class="btn primary">Salvar</button>
-            </div>
-            
-            <p id="statusText" class="status-text">Toque no microfone para iniciar.</p>
 
             <div id="transcricao-result" class="transcription-box"></div>
         </main>

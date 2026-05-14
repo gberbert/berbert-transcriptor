@@ -23,6 +23,8 @@ let mediaRecorder;
 let wakeLock = null;
 let timerInterval = null;
 let secondsRecorded = 0;
+let isRecordingIntentionally = false;
+let chunkIntervalTimer = null;
 
 function updateTimer() {
     secondsRecorded++;
@@ -82,6 +84,8 @@ async function startRecording() {
             mediaRecorder = new MediaRecorder(stream, options);
         }
 
+        isRecordingIntentionally = true;
+
         mediaRecorder.ondataavailable = async (event) => {
             if (event.data.size > 0) {
                 console.log(`[CLIENT] Chunk gerado. Tamanho: ${event.data.size} bytes`);
@@ -90,8 +94,22 @@ async function startRecording() {
             }
         };
 
-        // RENDER FREE TIER OPTIMIZATION: Iniciar fatiamento (chunking) a cada 3 minutos
-        mediaRecorder.start(CHUNK_TIME_MS);
+        mediaRecorder.onstop = () => {
+            // Reinicia imediatamente para não perder áudio, gerando um novo header WebM
+            if (isRecordingIntentionally && mediaRecorder.state === 'inactive') {
+                mediaRecorder.start();
+            }
+        };
+
+        // RENDER FREE TIER OPTIMIZATION: Reiniciar o gravador manualmente a cada N segundos
+        mediaRecorder.start();
+        
+        clearInterval(chunkIntervalTimer);
+        chunkIntervalTimer = setInterval(() => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop(); // Isso dispara o ondataavailable e em seguida o onstop (que chama o start de novo)
+            }
+        }, CHUNK_TIME_MS);
         
         // UI Updates
         mainControls.classList.remove('hidden');
@@ -121,9 +139,14 @@ continueBtn.addEventListener('click', startRecording);
 
 // Parar a gravação
 stopBtn.addEventListener('click', () => {
+    isRecordingIntentionally = false;
+    clearInterval(chunkIntervalTimer);
+    
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        if (mediaRecorder.stream) {
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
     }
     
     releaseWakeLock();

@@ -15,6 +15,8 @@ const summaryPrompt = document.getElementById('summaryPrompt');
 const btnSubmitSummary = document.getElementById('btnSubmitSummary');
 const summaryLoadingText = document.getElementById('summaryLoadingText');
 
+const btnCopyTranscription = document.getElementById('btnCopyTranscription');
+
 let reunioesCache = [];
 let reuniaoAtual = null;
 
@@ -36,11 +38,22 @@ async function loadHistory() {
 
         historyList.innerHTML = '';
         data.forEach((reuniao, index) => {
+            const container = document.createElement('div');
+            container.className = 'swipe-container';
+            
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'swipe-actions';
+            actionsDiv.innerHTML = `
+                <button class="swipe-action-btn swipe-action-edit" title="Editar">✏️</button>
+                <button class="swipe-action-btn swipe-action-delete" title="Excluir">🗑️</button>
+            `;
+            
             const div = document.createElement('div');
             div.className = 'history-item';
-            const dataStr = new Date(reuniao.data_reuniao).toLocaleString('pt-BR');
+            // Prevenir scroll vertical durante swipe horizontal via CSS nativo
+            div.style.touchAction = 'pan-y'; 
             
-            // Cria um resumo/preview (até 150 caracteres)
+            const dataStr = new Date(reuniao.data_reuniao).toLocaleString('pt-BR');
             let preview = reuniao.conteudo_transcrito.substring(0, 150);
             if (reuniao.conteudo_transcrito.length > 150) preview += '...';
             
@@ -50,9 +63,75 @@ async function loadHistory() {
                 <p class="history-item-preview">${preview}</p>
             `;
             
-            // Ao clicar no item, abre a tela de detalhes
-            div.addEventListener('click', () => openDetail(index));
-            historyList.appendChild(div);
+            // Touch Swipe Logic
+            let startX = 0;
+            let currentX = 0;
+            const threshold = 140; // max px to swipe left (2 buttons)
+            let isSwiped = false;
+            
+            div.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                div.classList.add('swiping');
+            });
+            
+            div.addEventListener('touchmove', (e) => {
+                const diffX = e.touches[0].clientX - startX;
+                // Only allow swiping left, or swiping right to close
+                if (diffX < 0 && !isSwiped) {
+                    currentX = Math.max(diffX, -threshold - 20); // add a bit of elasticity
+                    div.style.transform = `translateX(${currentX}px)`;
+                } else if (diffX > 0 && isSwiped) {
+                    currentX = Math.min(-threshold + diffX, 0);
+                    div.style.transform = `translateX(${currentX}px)`;
+                }
+            });
+            
+            div.addEventListener('touchend', () => {
+                div.classList.remove('swiping');
+                if (currentX < -60) {
+                    div.style.transform = `translateX(-${threshold}px)`;
+                    isSwiped = true;
+                } else {
+                    div.style.transform = `translateX(0px)`;
+                    isSwiped = false;
+                }
+                currentX = isSwiped ? -threshold : 0;
+            });
+            
+            // Edit logic
+            actionsDiv.querySelector('.swipe-action-edit').addEventListener('click', () => {
+                const novoTitulo = prompt("Novo título para a transcrição:", reuniao.titulo || "Reunião Sem Título");
+                if (novoTitulo) {
+                    fetch('/reunioes/' + reuniao._id, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ titulo: novoTitulo })
+                    }).then(() => loadHistory());
+                }
+            });
+            
+            // Delete logic
+            actionsDiv.querySelector('.swipe-action-delete').addEventListener('click', () => {
+                if(confirm("Tem certeza que deseja excluir esta transcrição? (Os resumos vinculados também sumirão)")) {
+                    fetch('/reunioes/' + reuniao._id, { method: 'DELETE' })
+                    .then(() => loadHistory());
+                }
+            });
+            
+            // Ao clicar no item, fecha se estiver aberto, senão abre detalhe
+            div.addEventListener('click', () => {
+                if (isSwiped) {
+                    div.style.transform = `translateX(0px)`;
+                    isSwiped = false;
+                    currentX = 0;
+                } else {
+                    openDetail(index);
+                }
+            });
+            
+            container.appendChild(actionsDiv);
+            container.appendChild(div);
+            historyList.appendChild(container);
         });
     } catch (e) {
         if (loadingIndicator) loadingIndicator.style.display = 'none';
@@ -78,6 +157,18 @@ backToListBtn.addEventListener('click', () => {
     // Animação de saída
     historyDetail.classList.remove('visible');
     reuniaoAtual = null;
+});
+
+// Ação de Copiar
+btnCopyTranscription.addEventListener('click', () => {
+    if (!reuniaoAtual) return;
+    navigator.clipboard.writeText(reuniaoAtual.conteudo_transcrito).then(() => {
+        const originalIcon = btnCopyTranscription.textContent;
+        btnCopyTranscription.textContent = '✅';
+        setTimeout(() => {
+            btnCopyTranscription.textContent = originalIcon;
+        }, 2000);
+    });
 });
 
 // Lógica do Modal de Resumo

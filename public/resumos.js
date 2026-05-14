@@ -9,6 +9,7 @@ const loadingIndicator = document.getElementById('loading');
 
 const btnEditResumo = document.getElementById('btnEditResumo');
 const btnDeleteResumo = document.getElementById('btnDeleteResumo');
+const btnCopyResumo = document.getElementById('btnCopyResumo');
 const editContent = document.getElementById('edit-content');
 const editTextarea = document.getElementById('edit-textarea');
 const btnCancelEdit = document.getElementById('btnCancelEdit');
@@ -35,10 +36,21 @@ async function loadResumos() {
 
         resumosList.innerHTML = '';
         data.forEach((resumo, index) => {
+            const container = document.createElement('div');
+            container.className = 'swipe-container';
+            
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'swipe-actions';
+            actionsDiv.innerHTML = `
+                <button class="swipe-action-btn swipe-action-edit" title="Editar">✏️</button>
+                <button class="swipe-action-btn swipe-action-delete" title="Excluir">🗑️</button>
+            `;
+            
             const div = document.createElement('div');
             div.className = 'history-item';
-            const dataStr = new Date(resumo.data_geracao).toLocaleString('pt-BR');
+            div.style.touchAction = 'pan-y'; 
             
+            const dataStr = new Date(resumo.data_geracao).toLocaleString('pt-BR');
             let preview = resumo.texto_resumo.substring(0, 150);
             if (resumo.texto_resumo.length > 150) preview += '...';
             
@@ -51,8 +63,69 @@ async function loadResumos() {
                 <p class="history-item-preview">${preview}</p>
             `;
             
-            div.addEventListener('click', () => openDetail(index));
-            resumosList.appendChild(div);
+            // Touch Swipe Logic
+            let startX = 0;
+            let currentX = 0;
+            const threshold = 140; // max px to swipe left (2 buttons)
+            let isSwiped = false;
+            
+            div.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                div.classList.add('swiping');
+            });
+            
+            div.addEventListener('touchmove', (e) => {
+                const diffX = e.touches[0].clientX - startX;
+                if (diffX < 0 && !isSwiped) {
+                    currentX = Math.max(diffX, -threshold - 20);
+                    div.style.transform = `translateX(${currentX}px)`;
+                } else if (diffX > 0 && isSwiped) {
+                    currentX = Math.min(-threshold + diffX, 0);
+                    div.style.transform = `translateX(${currentX}px)`;
+                }
+            });
+            
+            div.addEventListener('touchend', () => {
+                div.classList.remove('swiping');
+                if (currentX < -60) {
+                    div.style.transform = `translateX(-${threshold}px)`;
+                    isSwiped = true;
+                } else {
+                    div.style.transform = `translateX(0px)`;
+                    isSwiped = false;
+                }
+                currentX = isSwiped ? -threshold : 0;
+            });
+            
+            // Edit logic from swipe (Apenas renomear título para manter o padrão, ou abrir o resumo)
+            actionsDiv.querySelector('.swipe-action-edit').addEventListener('click', () => {
+                // Para edição profunda do texto, já existe o botão dentro do detalhe
+                // Aqui na lista vamos permitir abrir direto em modo edição
+                openDetail(index);
+                document.getElementById('btnEditResumo').click();
+            });
+            
+            // Delete logic from swipe
+            actionsDiv.querySelector('.swipe-action-delete').addEventListener('click', () => {
+                if(confirm("Tem certeza que deseja excluir permanentemente este resumo?")) {
+                    fetch('/resumos/' + resumo._id, { method: 'DELETE' })
+                    .then(() => loadResumos());
+                }
+            });
+            
+            div.addEventListener('click', () => {
+                if (isSwiped) {
+                    div.style.transform = `translateX(0px)`;
+                    isSwiped = false;
+                    currentX = 0;
+                } else {
+                    openDetail(index);
+                }
+            });
+            
+            container.appendChild(actionsDiv);
+            container.appendChild(div);
+            resumosList.appendChild(container);
         });
     } catch (e) {
         if (loadingIndicator) loadingIndicator.style.display = 'none';
@@ -81,6 +154,18 @@ function openDetail(index) {
 backToListBtn.addEventListener('click', () => {
     resumosDetail.classList.remove('visible');
     resumoAtual = null;
+});
+
+// Ação de Copiar
+btnCopyResumo.addEventListener('click', () => {
+    if (!resumoAtual) return;
+    navigator.clipboard.writeText(resumoAtual.texto_resumo).then(() => {
+        const originalIcon = btnCopyResumo.textContent;
+        btnCopyResumo.textContent = '✅';
+        setTimeout(() => {
+            btnCopyResumo.textContent = originalIcon;
+        }, 2000);
+    });
 });
 
 // Ações de Edição

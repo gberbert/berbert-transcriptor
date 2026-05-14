@@ -28,8 +28,13 @@
                 <button id="backToList" class="btn-icon">
                     <span>⬅️</span> Voltar
                 </button>
-                <h2 id="detail-title">Reunião</h2>
-                <span id="detail-date" class="detail-date"></span>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px;">
+                    <div>
+                        <h2 id="detail-title" style="margin-bottom: 4px;">Reunião</h2>
+                        <span id="detail-date" class="detail-date"></span>
+                    </div>
+                    <button id="btnCopyTranscription" class="btn-icon" style="font-size: 1.5rem; margin: 0; padding: 0;" title="Copiar texto">📋</button>
+                </div>
             </header>
             
             <div class="detail-body" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px;">

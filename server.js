@@ -97,6 +97,47 @@ app.get('/reunioes', async (req, res) => {
     }
 });
 
+// 3. Editar Reunião
+app.put('/reunioes/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { conteudo_transcrito, titulo } = req.body;
+        
+        const reuniaoAtualizada = await Reuniao.findByIdAndUpdate(
+            id, 
+            { conteudo_transcrito, titulo }, 
+            { new: true }
+        );
+        
+        if (!reuniaoAtualizada) {
+            return res.status(404).json({ error: 'Reunião não encontrada.' });
+        }
+        res.json({ success: true, reuniao: reuniaoAtualizada });
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao atualizar reunião:', err);
+        res.status(500).json({ error: 'Erro ao atualizar a reunião.' });
+    }
+});
+
+// 4. Excluir Reunião
+app.delete('/reunioes/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const reuniaoDeletada = await Reuniao.findByIdAndDelete(id);
+        
+        if (!reuniaoDeletada) {
+            return res.status(404).json({ error: 'Reunião não encontrada.' });
+        }
+        // Excluir resumos associados
+        await Resumo.deleteMany({ reuniao_id: id });
+        
+        res.json({ success: true, message: 'Reunião excluída com sucesso.' });
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao excluir reunião:', err);
+        res.status(500).json({ error: 'Erro ao excluir a reunião.' });
+    }
+});
+
 app.post('/transcrever', upload.single('audio'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'Nenhum arquivo de áudio recebido.' });
@@ -118,13 +159,18 @@ app.post('/transcrever', upload.single('audio'), async (req, res) => {
         uploadedFile = uploadResponse.file;
         console.log(`[API] File uploaded successfully: ${uploadedFile.uri}`);
 
-        // Transcrever usando o modelo Gemini 2.5 Flash com instrução de sistema
+        // Transcrever usando o modelo Gemini 2.5 Flash com instrução de sistema rigorosa
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash",
-            systemInstruction: "Você é um transcritor de áudio estrito. Sua única função é retornar o texto falado no áudio em anexo. Se o áudio estiver vazio, for apenas silêncio ou não contiver fala humana inteligível, você DEVE retornar estritamente uma string vazia. JAMAIS interaja com o usuário, não adicione comentários como 'Compreendido', nem peça por arquivos. Apenas transcreva o áudio ou retorne vazio."
+            systemInstruction: "Você é um transcritor de áudio robótico e estritamente literal. Sua única função é retornar as palavras exatas ditas no áudio. REGRAS CRÍTICAS: 1. NUNCA invente, deduza ou adicione palavras que não foram faladas claramente. 2. Se um trecho estiver ininteligível, com muito ruído de fundo ou silêncio, ignore-o completamente ou escreva '[inaudível]'. 3. JAMAIS tente adivinhar, continuar ou completar frases por conta própria. 4. Se o áudio inteiro for silêncio, retorne estritamente VAZIO.",
+            generationConfig: {
+                temperature: 0.1, // Temperatura baixa (quase zero) desliga a "criatividade" e foca na precisão estrita
+                topK: 32,
+                topP: 0.8
+            }
         });
         
-        const prompt = "Transcreva este áudio da reunião. Retorne APENAS a transcrição e absolutamente mais nada.";
+        const prompt = "Transcreva literalmente o áudio em anexo. Se não houver voz humana clara, não invente texto, retorne vazio.";
         
         const result = await model.generateContent([
             {
@@ -192,33 +238,41 @@ app.post('/gerar-resumo', async (req, res) => {
 
         const transcricao = reuniao.conteudo_transcrito;
         
-        // Montar o Prompt Baseado no Tipo
-        let systemInstruction = "";
-        if (tipo === "Reunião") {
-            systemInstruction = "Você é um assistente executivo especializado em analisar transcrições de reuniões. Extraia os pontos principais, as decisões tomadas e os próximos passos (action items).";
-        } else if (tipo === "Palestra") {
-            systemInstruction = "Você é um professor especializado em sumarizar palestras. Crie um resumo estruturado destacando o tema principal, as ideias centrais abordadas e uma conclusão clara.";
-        } else {
-            systemInstruction = "Você é um assistente especialista em resumir textos.";
-        }
-
-        let userPrompt = `Abaixo está a transcrição de um áudio.\n\n[TRANSCRIÇÃO]:\n${transcricao}\n\n`;
-        if (prompt_extra && prompt_extra.trim().length > 0) {
-            userPrompt += `\n[INSTRUÇÕES EXTRAS DO USUÁRIO]:\n${prompt_extra}\n`;
-        }
-        
-        userPrompt += "\nPor favor, gere o resumo conforme as instruções.";
-
-        console.log(`[API] Gerando resumo para reunião ID ${reuniao_id} (Tipo: ${tipo})`);
-
-        // Chamada direta para o Gemini Text (Flash)
-        const model = genAI.getGenerativeModel({ 
+        // Etapa 1: Resumo Fiel e Neutro (Evitar Alucinações)
+        console.log(`[API] Etapa 1: Gerando resumo neutro da transcrição...`);
+        const modelStep1 = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash",
-            systemInstruction: systemInstruction
+            systemInstruction: "Você é um arquivista neutro e preciso. Seu trabalho é ler a transcrição de áudio a seguir e criar um resumo detalhado e estritamente fiel aos fatos apresentados. JAMAIS adicione informações externas, opiniões ou invente dados. Se não houver informação suficiente, diga."
+        });
+        
+        const promptStep1 = `[TRANSCRIÇÃO]:\n${transcricao}\n\nGere o resumo neutro e fiel agora:`;
+        const resultStep1 = await modelStep1.generateContent(promptStep1);
+        const resumoBase = resultStep1.response.text();
+
+        // Etapa 2: Formatação Baseada no Tipo
+        console.log(`[API] Etapa 2: Formatando resumo para o tipo: ${tipo}...`);
+        let systemInstructionStep2 = "";
+        if (tipo === "Reunião") {
+            systemInstructionStep2 = "Você é um assistente executivo especialista em formatar Atas de Reunião. Formate as informações recebidas separando claramente em: 1. Pauta/Contexto 2. Decisões Tomadas 3. Próximos Passos (Action Items com responsáveis, se houver).";
+        } else if (tipo === "Palestra") {
+            systemInstructionStep2 = "Você é um curador de conteúdo experiente. Formate as informações recebidas como um resumo de palestra, contendo: 1. Tema Central 2. Ideias Principais 3. Conclusão/Insights.";
+        } else {
+            systemInstructionStep2 = "Você é um assistente especialista em organizar textos de forma clara e legível em tópicos.";
+        }
+
+        const modelStep2 = genAI.getGenerativeModel({ 
+            model: "gemini-2.5-flash",
+            systemInstruction: systemInstructionStep2
         });
 
-        const result = await model.generateContent(userPrompt);
-        const resumoTexto = result.response.text();
+        let promptStep2 = `Aqui estão os fatos estritos extraídos do áudio:\n\n[FATOS EXTRATÍDOS]:\n${resumoBase}\n\n`;
+        if (prompt_extra && prompt_extra.trim().length > 0) {
+            promptStep2 += `[ATENÇÃO - APLIQUE ESTAS INSTRUÇÕES EXTRAS DO USUÁRIO]:\n${prompt_extra}\n\n`;
+        }
+        promptStep2 += "Agora, formate essas informações estritamente de acordo com suas instruções de sistema e as instruções do usuário. Não invente nenhum dado novo que não esteja nos [FATOS EXTRATÍDOS].";
+
+        const resultStep2 = await modelStep2.generateContent(promptStep2);
+        const resumoTexto = resultStep2.response.text();
 
         // Salvar o resumo gerado no banco de dados
         const novoResumo = new Resumo({
