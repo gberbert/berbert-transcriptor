@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Berbert Transcriptor</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1a1a1a">
+    <!-- Fonte Inter para um visual premium -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="header-content">
+                <h1>Berbert Transcriptor</h1>
+                <button id="historyBtn" class="btn secondary small">Ver Histórico</button>
+            </div>
+            <p class="subtitle">Transcrição contínua com IA</p>
+        </header>
+
+        <main>
+            <div class="controls" id="mainControls">
+                <button id="startBtn" class="btn primary">
+                    <span class="icon">🎙️</span> Iniciar Transcrição
+                </button>
+                <button id="stopBtn" class="btn danger hidden">
+                    <span class="icon">⏹️</span> Parar
+                </button>
+            </div>
+            
+            <div id="postRecordControls" class="controls hidden">
+                <button id="continueBtn" class="btn primary">
+                    <span class="icon">▶️</span> Continuar Transcrição
+                </button>
+                <button id="saveBtn" class="btn secondary">
+                    <span class="icon">💾</span> Salvar Transcrição
+                </button>
+            </div>
+
+            <div id="status" class="status-indicator">
+                <div class="dot"></div>
+                <span id="statusText">Pronto para gravar</span>
+                <span id="timer" class="timer hidden">00:00:00</span>
+            </div>
+
+            <div class="transcription-container">
+                <div id="transcricao-result" class="transcription-content">
+                    <!-- Text will be appended here -->
+                    <p class="placeholder">A transcrição aparecerá aqui...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

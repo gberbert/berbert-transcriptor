@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Histórico - Berbert Transcriptor</title>
+    <link rel="stylesheet" href="style.css">
+    <meta name="theme-color" content="#1a1a1a">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="header-content">
+                <h1>Histórico de Reuniões</h1>
+                <button id="backHomeBtn" class="btn secondary small">Voltar ao Gravador</button>
+            </div>
+        </header>
+
+        <main>
+            <!-- View da Lista -->
+            <div id="listView">
+                <div id="historyList" class="history-list-page">
+                    <p class="placeholder">Carregando histórico...</p>
+                </div>
+            </div>
+
+            <!-- View do Detalhe (Oculta por padrão) -->
+            <div id="detailView" class="hidden">
+                <button id="backToListBtn" class="btn secondary small" style="margin-bottom: 1.5rem;">← Voltar para Lista</button>
+                <div class="transcription-container" style="height: 65vh;">
+                    <h2 id="detailTitle" style="margin-bottom: 0.5rem; color: var(--text-primary);"></h2>
+                    <p id="detailDate" style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;"></p>
+                    <div id="detailContent" class="transcription-content" style="white-space: pre-wrap;"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="history.js"></script>
+</body>
+</html>

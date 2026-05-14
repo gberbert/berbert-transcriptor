@@ -1,0 +1,16 @@
+{
+  "name": "Berbert Transcriptor",
+  "short_name": "Transcriptor",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#121214",
+  "theme_color": "#121214",
+  "description": "Aplicativo PWA para gravação e transcrição de reuniões usando o Gemini.",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
