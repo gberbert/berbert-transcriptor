@@ -27,12 +27,16 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// Definir Schema de Reunião (com user_id)
+// Definir Schema de Reunião (com user_id e fotos)
 const reuniaoSchema = new mongoose.Schema({
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false }, // false para não quebrar dados antigos
     data_reuniao: { type: Date, default: Date.now },
     conteudo_transcrito: String,
-    titulo: String
+    titulo: String,
+    fotos: [{
+        base64: String,
+        data_captura: { type: Date, default: Date.now }
+    }]
 });
 const Reuniao = mongoose.model('Reuniao', reuniaoSchema);
 
@@ -251,6 +255,32 @@ app.patch('/reunioes/:id/append', authMiddleware, async (req, res) => {
     }
 });
 
+// 4.1. Adicionar foto à reunião
+app.patch('/reunioes/:id/fotos', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { foto_base64 } = req.body;
+
+        if (!foto_base64) {
+            return res.status(400).json({ error: 'Foto não enviada.' });
+        }
+
+        const reuniaoAtualizada = await Reuniao.findByIdAndUpdate(
+            id,
+            { $push: { fotos: { base64: foto_base64 } } },
+            { new: true }
+        );
+
+        if (!reuniaoAtualizada) {
+            return res.status(404).json({ error: 'Reunião não encontrada.' });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao salvar foto:', err);
+        res.status(500).json({ error: 'Erro ao salvar foto.' });
+    }
+});
+
 // 5. Excluir Reunião
 app.delete('/reunioes/:id', authMiddleware, async (req, res) => {
     try {
@@ -390,8 +420,27 @@ app.post('/gerar-resumo', authMiddleware, async (req, res) => {
             systemInstruction: "Você é um arquivista neutro e preciso. Seu trabalho é ler a transcrição de áudio a seguir e criar um resumo detalhado e estritamente fiel aos fatos apresentados. JAMAIS adicione informações externas, opiniões ou invente dados. Se não houver informação suficiente, diga."
         });
         
-        const promptStep1 = `[TRANSCRIÇÃO]:\n${transcricao}\n\nGere o resumo neutro e fiel agora:`;
-        const resultStep1 = await modelStep1.generateContent(promptStep1);
+        // Preparar imagens se existirem
+        const imageParts = [];
+        if (reuniao.fotos && reuniao.fotos.length > 0) {
+            reuniao.fotos.forEach(foto => {
+                const match = foto.base64.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+                if (match) {
+                    imageParts.push({
+                        inlineData: {
+                            data: match[2],
+                            mimeType: match[1]
+                        }
+                    });
+                }
+            });
+            console.log(`[API] Anexando ${imageParts.length} foto(s) ao prompt da Etapa 1.`);
+        }
+
+        const promptText = `[TRANSCRIÇÃO]:\n${transcricao}\n\n[INSTRUÇÃO]: ${imageParts.length > 0 ? "Analise a transcrição E AS IMAGENS EM ANEXO. Descreva e correlacione as imagens com o texto para extrair mais contexto. " : ""}Gere o resumo neutro e fiel agora:`;
+        
+        const promptParts = [promptText, ...imageParts];
+        const resultStep1 = await modelStep1.generateContent(promptParts);
         const resumoBase = resultStep1.response.text();
 
         // Etapa 2: Formatação Baseada no Tipo

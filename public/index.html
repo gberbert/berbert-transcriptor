@@ -60,6 +60,7 @@
                 </div>
 
                 <div id="mainControls" class="controls-row">
+                    <button id="photoBtn" class="btn secondary photo-btn" disabled>📸 Foto</button>
                     <button id="stopBtn" class="btn secondary stop-btn" disabled>Parar</button>
                 </div>
                 
@@ -71,8 +72,24 @@
                 <p id="statusText" class="status-text">Toque no microfone para iniciar.</p>
             </div>
 
+            <!-- Miniaturas de fotos capturadas -->
+            <div id="photoThumbnailsContainer" class="photo-thumbnails-container hidden">
+                <div id="photoThumbnails" class="photo-thumbnails-list"></div>
+            </div>
+
             <div id="transcricao-result" class="transcription-box"></div>
         </main>
+
+        <!-- Modal da Câmera -->
+        <div id="cameraModal" class="camera-modal hidden">
+            <div class="camera-modal-content">
+                <video id="cameraPreview" autoplay playsinline></video>
+                <div class="camera-controls">
+                    <button id="btnCancelCamera" class="btn secondary">Cancelar</button>
+                    <button id="btnCapturePhoto" class="btn primary capture-btn">📸 Capturar</button>
+                </div>
+            </div>
+        </div>
 
         <nav class="app-bottom-tabs">
             <a href="index.html" class="tab-item active">

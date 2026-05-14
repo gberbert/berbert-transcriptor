@@ -51,6 +51,16 @@ const statusIndicator = document.getElementById('status');
 const transcricaoResult = document.getElementById('transcricao-result');
 const timerElement = document.getElementById('timer');
 
+// Câmera UI
+const photoBtn = document.getElementById('photoBtn');
+const cameraModal = document.getElementById('cameraModal');
+const cameraPreview = document.getElementById('cameraPreview');
+const btnCancelCamera = document.getElementById('btnCancelCamera');
+const btnCapturePhoto = document.getElementById('btnCapturePhoto');
+const photoThumbnailsContainer = document.getElementById('photoThumbnailsContainer');
+const photoThumbnails = document.getElementById('photoThumbnails');
+let cameraStream = null;
+
 let mediaRecorder;
 let wakeLock = null;
 let timerInterval = null;
@@ -59,6 +69,136 @@ let isRecordingIntentionally = false;
 let chunkIntervalTimer = null;
 let currentReuniaoId = null; // ID do registro atual no banco (salva a cada chunk)
 let limiteAtingido = false;  // Flag que bloqueia o início da gravação
+
+// ==========================================
+// OFFLINE RETRY QUEUE (IndexedDB)
+// ==========================================
+let db;
+const DB_NAME = 'PlaubertDB';
+const STORE_NAME = 'pending_chunks';
+
+// Inicializar IndexedDB
+const request = indexedDB.open(DB_NAME, 1);
+request.onupgradeneeded = (event) => {
+    db = event.target.result;
+    if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+    }
+};
+request.onsuccess = (event) => {
+    db = event.target.result;
+    // Tenta processar fila assim que o banco estiver pronto
+    processChunkQueue();
+};
+request.onerror = (event) => {
+    console.error('[INDEXEDDB] Erro ao abrir banco local:', event.target.error);
+};
+
+// Salvar chunk na fila
+function saveChunkToQueue(blob, tempId, reuniaoId) {
+    if (!db) return;
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    store.add({
+        blob: blob,
+        tempId: tempId,
+        reuniaoId: reuniaoId,
+        timestamp: Date.now()
+    });
+    console.log(`[QUEUE] Chunk salvo na fila local (tempId: ${tempId})`);
+}
+
+// Consumir fila e reenviar
+let isProcessingQueue = false;
+async function processChunkQueue() {
+    if (!db || isProcessingQueue || !navigator.onLine) return;
+    isProcessingQueue = true;
+
+    try {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = async () => {
+            const chunks = request.result;
+            // Ordenar por timestamp para garantir a ordem da transcrição
+            chunks.sort((a, b) => a.timestamp - b.timestamp);
+
+            for (const item of chunks) {
+                // Parar processamento se a internet cair no meio
+                if (!navigator.onLine) break;
+
+                console.log(`[QUEUE] Processando chunk pendente: ${item.tempId}`);
+                const formData = new FormData();
+                formData.append('audio', item.blob, 'chunk.webm');
+                // Adiciona o reuniaoId ao FormData para que o servidor saiba onde anexar, 
+                // caso o chunk tenha sido gerado quando já havia uma reunião.
+                if (item.reuniaoId || currentReuniaoId) {
+                    formData.append('reuniao_id', item.reuniaoId || currentReuniaoId);
+                }
+
+                try {
+                    const response = await authFetch('/transcrever', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const resultElement = document.getElementById(item.tempId);
+                        
+                        if (resultElement && data.texto) {
+                            resultElement.textContent = data.texto + ' ';
+                            resultElement.style.color = 'var(--text-primary)';
+                            resultElement.classList.remove('queued');
+                            resultElement.removeAttribute('id');
+                        }
+
+                        // Persistir no banco após transcrição
+                        if (!currentReuniaoId) {
+                            // Criar nova reunião se for o primeiro chunk (e a reunião ainda não existir)
+                            const saveRes = await authFetch('/salvar-reuniao', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ conteudo_transcrito: data.texto })
+                            });
+                            const saveData = await saveRes.json();
+                            if (saveData.reuniao && saveData.reuniao._id) {
+                                currentReuniaoId = saveData.reuniao._id;
+                            }
+                        } else {
+                            // Acrescentar
+                            await authFetch(`/reunioes/${currentReuniaoId}/append`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ novo_texto: data.texto })
+                            });
+                        }
+
+                        // Sucesso total, remover do IndexedDB
+                        const delTx = db.transaction([STORE_NAME], 'readwrite');
+                        delTx.objectStore(STORE_NAME).delete(item.id);
+                        console.log(`[QUEUE] Chunk ${item.tempId} enviado e removido da fila.`);
+                    }
+                } catch (error) {
+                    console.error(`[QUEUE] Falha ao re-enviar chunk ${item.tempId}:`, error);
+                    // Sai do loop para tentar o resto depois, mantendo a ordem
+                    break;
+                }
+            }
+        };
+    } finally {
+        isProcessingQueue = false;
+    }
+}
+
+// Gatilhos para processar a fila
+window.addEventListener('online', () => {
+    console.log('[NETWORK] Conexão restaurada. Processando fila...');
+    processChunkQueue();
+});
+setInterval(processChunkQueue, 15000); // Tentar a cada 15 segundos se houver algo
+// ==========================================
 
 // Verificar limites de uso ao carregar a tela
 async function checkLimits() {
@@ -195,8 +335,9 @@ async function startRecording() {
         postRecordControls.classList.add('hidden');
         // Adiciona efeito de pulso no botão principal
         startBtn.classList.add('recording');
-        // Habilita o botão de parar
+        // Habilita os botões de controle
         stopBtn.disabled = false;
+        if (photoBtn) photoBtn.disabled = false;
         
         statusIndicator.classList.add('recording');
         statusText.textContent = 'Gravando...';
@@ -237,8 +378,149 @@ stopBtn.addEventListener('click', () => {
     statusIndicator.classList.remove('recording');
     startBtn.classList.remove('recording');
     stopBtn.disabled = true;
+    if (photoBtn) photoBtn.disabled = true;
     statusText.textContent = 'Gravação pausada';
 });
+
+// ==========================================
+// CÂMERA IN-APP (WEBRTC) - Captura de Fotos
+// ==========================================
+// Variáveis para Zoom
+let videoTrack = null;
+let minZoom = 1;
+let maxZoom = 1;
+let currentZoom = 1;
+let initialPinchDistance = null;
+
+photoBtn.addEventListener('click', async () => {
+    if (!currentReuniaoId) {
+        alert('Aguarde o primeiro trecho de áudio ser salvo para tirar fotos.');
+        return;
+    }
+    
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } // Câmera traseira
+        });
+        cameraPreview.srcObject = cameraStream;
+        cameraModal.classList.remove('hidden');
+        
+        // Tentar obter suporte a Zoom
+        videoTrack = cameraStream.getVideoTracks()[0];
+        const capabilities = videoTrack.getCapabilities();
+        const settings = videoTrack.getSettings();
+        
+        if (capabilities.zoom) {
+            minZoom = capabilities.zoom.min || 1;
+            maxZoom = capabilities.zoom.max || 5;
+            currentZoom = settings.zoom || minZoom;
+        }
+    } catch (err) {
+        console.error('[CAMERA] Erro ao acessar a câmera:', err);
+        alert('Não foi possível acessar a câmera.');
+    }
+});
+
+// Lógica de Pinch-to-Zoom na tela da Câmera
+cameraPreview.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2 && videoTrack) {
+        initialPinchDistance = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+    }
+});
+
+cameraPreview.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && initialPinchDistance && videoTrack) {
+        e.preventDefault(); // Impede o scroll
+        
+        const currentDistance = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        
+        // Calcular o quão rápido a pinça está abrindo/fechando (ajuste sensibilidade)
+        const ratio = currentDistance / initialPinchDistance;
+        let newZoom = currentZoom * (ratio > 1 ? 1.05 : 0.95);
+        
+        newZoom = Math.max(minZoom, Math.min(newZoom, maxZoom));
+        
+        // Aplica o novo zoom se for suportado e atualiza a variável atual
+        videoTrack.applyConstraints({ advanced: [{ zoom: newZoom }] })
+            .then(() => {
+                currentZoom = newZoom;
+                initialPinchDistance = currentDistance; // Atualiza para suavizar o movimento
+            })
+            .catch(err => console.log('Zoom não aplicado:', err));
+    }
+}, { passive: false }); // passive false para o preventDefault funcionar
+
+cameraPreview.addEventListener('touchend', () => {
+    initialPinchDistance = null;
+});
+
+btnCancelCamera.addEventListener('click', () => {
+    fecharCamera();
+});
+
+btnCapturePhoto.addEventListener('click', async () => {
+    if (!cameraStream) return;
+    
+    // Feedback visual
+    btnCapturePhoto.textContent = '⏳ Salvando...';
+    btnCapturePhoto.disabled = true;
+
+    // Desenhar o frame atual em um canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = cameraPreview.videoWidth;
+    canvas.height = cameraPreview.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+    
+    // Exportar para Base64 (compressão JPEG 0.7)
+    const base64Image = canvas.toDataURL('image/jpeg', 0.7);
+    
+    // Exibir miniatura na UI
+    adicionarMiniatura(base64Image);
+    
+    // Enviar para o backend
+    try {
+        const res = await authFetch(`/reunioes/${currentReuniaoId}/fotos`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ foto_base64: base64Image })
+        });
+        
+        if (!res.ok) throw new Error('Erro ao salvar foto no backend');
+        console.log('[CAMERA] Foto anexada com sucesso à reunião:', currentReuniaoId);
+    } catch (err) {
+        console.error('[CAMERA]', err);
+        alert('A foto foi tirada, mas houve um erro ao salvá-na nuvem.');
+    } finally {
+        fecharCamera();
+        btnCapturePhoto.textContent = '📸 Capturar';
+        btnCapturePhoto.disabled = false;
+    }
+});
+
+function fecharCamera() {
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+    cameraModal.classList.add('hidden');
+}
+
+function adicionarMiniatura(base64Src) {
+    photoThumbnailsContainer.classList.remove('hidden');
+    const img = document.createElement('img');
+    img.src = base64Src;
+    img.className = 'photo-thumbnail';
+    photoThumbnails.appendChild(img);
+}
+
+// ==========================================
 
 // Salvar / Finalizar a transcrição
 saveBtn.addEventListener('click', async () => {
@@ -283,6 +565,8 @@ saveBtn.addEventListener('click', async () => {
     
     statusText.textContent = 'Pronto para gravar';
     transcricaoResult.innerHTML = '<p class="placeholder">A transcrição aparecerá aqui...</p>';
+    photoThumbnailsContainer.classList.add('hidden');
+    photoThumbnails.innerHTML = '';
     
     // Atualizar limites após salvar novo item
     checkLimits();
@@ -356,10 +640,15 @@ async function sendChunkToBackend(blob) {
 
     } catch (error) {
         console.error(`[CLIENT] Erro de rede ou timeout ao transcrever chunk:`, error);
+        
+        // Salvar na fila offline
+        saveChunkToQueue(blob, tempId, currentReuniaoId);
+        
         const resultElement = document.getElementById(tempId);
         if (resultElement) {
-            resultElement.textContent = ' [Erro de conexão neste trecho] ';
-            resultElement.style.color = 'var(--danger-color)';
+            resultElement.textContent = ' [⏳ Na fila de reenvio...] ';
+            resultElement.style.color = '#eab308'; // Amarelo/warning
+            resultElement.classList.add('queued');
         }
     } finally {
         const container = document.querySelector('.app-content');

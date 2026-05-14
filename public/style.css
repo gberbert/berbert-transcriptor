@@ -592,6 +592,102 @@ html, body {
     border: none;
 }
 
+/* ===========================
+   CÂMERA E MINIATURAS
+   =========================== */
+
+/* Modal da Câmera (Fullscreen) */
+.camera-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+}
+
+.camera-modal.hidden {
+    display: none !important;
+}
+
+.camera-modal-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+#cameraPreview {
+    flex: 1;
+    width: 100%;
+    object-fit: cover;
+    background: #000;
+}
+
+.camera-controls {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    padding: 30px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
+    box-sizing: border-box;
+}
+
+.capture-btn {
+    font-size: 1.1rem;
+    padding: 14px 24px;
+    border-radius: 30px;
+    box-shadow: 0 4px 15px rgba(130, 87, 229, 0.4);
+}
+
+/* Container de Miniaturas */
+.photo-thumbnails-container {
+    width: 100%;
+    padding: 10px 20px;
+    box-sizing: border-box;
+}
+
+.photo-thumbnails-container.hidden {
+    display: none;
+}
+
+.photo-thumbnails-list {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.photo-thumbnails-list::-webkit-scrollbar {
+    height: 6px;
+}
+.photo-thumbnails-list::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 10px;
+}
+
+.photo-thumbnail {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.photo-btn {
+    flex: 0.8 !important; /* Um pouco menor que o Parar se necessário, ou flex: 1 */
+}
+
 /* BOTTOM TABS NAV BAR (Native iOS feel) */
 .app-bottom-tabs {
     flex-shrink: 0;

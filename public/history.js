@@ -149,6 +149,29 @@ function openDetail(index) {
     detailDate.textContent = new Date(reuniao.data_reuniao).toLocaleString('pt-BR');
     detailContent.textContent = reuniao.conteudo_transcrito;
     
+    // Carregar fotos se houver
+    const photosContainer = document.getElementById('detail-photos-container');
+    const photosList = document.getElementById('detail-photos');
+    photosList.innerHTML = '';
+    
+    if (reuniao.fotos && reuniao.fotos.length > 0) {
+        photosContainer.classList.remove('hidden');
+        reuniao.fotos.forEach(foto => {
+            const img = document.createElement('img');
+            img.src = foto.base64;
+            img.className = 'photo-thumbnail';
+            // Click to view full image logic (simple open in new tab or modal)
+            img.style.cursor = 'pointer';
+            img.onclick = () => {
+                const w = window.open('');
+                w.document.write(`<img src="${foto.base64}" style="max-width: 100%;">`);
+            };
+            photosList.appendChild(img);
+        });
+    } else {
+        photosContainer.classList.add('hidden');
+    }
+    
     // Animação de entrada
     historyDetail.classList.add('visible');
 }
