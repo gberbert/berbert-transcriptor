@@ -24,7 +24,21 @@ fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
 const versionFileContent = `const APP_VERSION = "v${newVersion}";\ndocument.addEventListener('DOMContentLoaded', () => {\n    const el = document.getElementById('app-version-display');\n    if(el) el.textContent = APP_VERSION;\n});\n`;
 fs.writeFileSync(versionFilePath, versionFileContent);
 
-console.log(`✅ Versão atualizada: ${currentVersion} -> ${newVersion}`);
+// 4.1 Injetar cache-busting nos arquivos HTML (para forçar atualização no navegador)
+const htmlFiles = ['index.html', 'history.html', 'resumos.html', 'login.html'];
+htmlFiles.forEach(file => {
+    const filePath = path.join(__dirname, 'public', file);
+    if (fs.existsSync(filePath)) {
+        let content = fs.readFileSync(filePath, 'utf8');
+        // Atualiza src="qualquer.js" para src="qualquer.js?v=NOVA_VERSAO"
+        content = content.replace(/(src="[^"]+\.js)(\?v=[^"]+)?(["])/g, `$1?v=${newVersion}$3`);
+        // Atualiza href="qualquer.css" para href="qualquer.css?v=NOVA_VERSAO"
+        content = content.replace(/(href="[^"]+\.css)(\?v=[^"]+)?(["])/g, `$1?v=${newVersion}$3`);
+        fs.writeFileSync(filePath, content);
+    }
+});
+
+console.log(`✅ Versão atualizada: ${currentVersion} -> ${newVersion} e Cache-Busting aplicado!`);
 
 // 5. Executar comandos GIT
 try {
