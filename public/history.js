@@ -212,10 +212,7 @@ function openDetail(index) {
                 img.style.objectFit = 'cover';
                 img.style.borderRadius = '8px';
                 img.style.cursor = 'pointer';
-                img.onclick = () => {
-                    const w = window.open('');
-                    w.document.write(`<img src="${item.data}" style="max-width: 100%;">`);
-                };
+                img.onclick = () => openMediaModal('foto', item.data);
                 wrapper.appendChild(img);
             } else if (item.type === 'comentario') {
                 const postit = document.createElement('div');
@@ -229,6 +226,8 @@ function openDetail(index) {
                 postit.style.color = '#000';
                 postit.style.overflow = 'hidden';
                 postit.style.transform = `rotate(${Math.random() * 10 - 5}deg)`;
+                postit.style.cursor = 'pointer';
+                postit.onclick = () => openMediaModal('comentario', item.data);
                 
                 const textSpan = document.createElement('div');
                 textSpan.textContent = item.data;
@@ -320,6 +319,146 @@ btnSubmitSummary.addEventListener('click', async () => {
     } finally {
         btnSubmitSummary.disabled = false;
         summaryLoadingText.classList.add('hidden');
+    }
+});
+
+// ==========================================
+// MEDIA MODAL LOGIC (Zoom & Share)
+// ==========================================
+const mediaModal = document.getElementById('mediaModal');
+const mediaModalContent = document.getElementById('mediaModalContent');
+const btnCloseMediaModal = document.getElementById('btnCloseMediaModal');
+const btnShareMedia = document.getElementById('btnShareMedia');
+
+let currentMediaBlob = null;
+let currentMediaType = null;
+let currentMediaText = null;
+
+// Variáveis de Zoom/Pan
+let currentScale = 1;
+let currentPanX = 0;
+let currentPanY = 0;
+let isPanning = false;
+let startX = 0, startY = 0;
+let initialDistance = 0;
+
+window.openMediaModal = function(type, data) {
+    currentScale = 1; currentPanX = 0; currentPanY = 0;
+    mediaModalContent.innerHTML = '';
+    currentMediaType = type;
+    
+    if (type === 'foto') {
+        const img = document.createElement('img');
+        img.src = data;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '100%';
+        img.style.objectFit = 'contain';
+        img.style.transform = `scale(${currentScale}) translate(${currentPanX}px, ${currentPanY}px)`;
+        img.style.transition = 'transform 0.1s ease-out';
+        mediaModalContent.appendChild(img);
+        
+        currentMediaBlob = data;
+        currentMediaText = null;
+        
+        // Touch events for pinch & pan
+        img.addEventListener('touchstart', handleTouchStart);
+        img.addEventListener('touchmove', handleTouchMove);
+        img.addEventListener('touchend', handleTouchEnd);
+        
+    } else if (type === 'comentario') {
+        const postit = document.createElement('div');
+        postit.style.width = '300px';
+        postit.style.minHeight = '300px';
+        postit.style.background = '#fbbf24';
+        postit.style.padding = '20px';
+        postit.style.boxShadow = '5px 5px 15px rgba(0,0,0,0.5)';
+        postit.style.fontFamily = "'Comic Sans MS', 'Chalkboard SE', sans-serif";
+        postit.style.fontSize = '1.5rem';
+        postit.style.color = '#000';
+        postit.style.display = 'flex';
+        postit.style.alignItems = 'center';
+        postit.style.justifyContent = 'center';
+        postit.style.textAlign = 'center';
+        postit.textContent = data;
+        mediaModalContent.appendChild(postit);
+        
+        currentMediaText = data;
+        currentMediaBlob = null;
+    }
+    
+    mediaModal.classList.remove('hidden');
+};
+
+function handleTouchStart(e) {
+    if (e.touches.length === 2) {
+        initialDistance = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+    } else if (e.touches.length === 1) {
+        isPanning = true;
+        startX = e.touches[0].clientX - currentPanX;
+        startY = e.touches[0].clientY - currentPanY;
+    }
+}
+
+function handleTouchMove(e) {
+    e.preventDefault(); // Impede o scroll nativo da página
+    const img = mediaModalContent.querySelector('img');
+    if (!img) return;
+    
+    if (e.touches.length === 2) {
+        const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        if (initialDistance) {
+            const scaleChange = dist / initialDistance;
+            currentScale = Math.max(1, Math.min(currentScale * scaleChange, 5));
+            initialDistance = dist;
+            img.style.transform = `translate(${currentPanX}px, ${currentPanY}px) scale(${currentScale})`;
+        }
+    } else if (e.touches.length === 1 && isPanning) {
+        currentPanX = e.touches[0].clientX - startX;
+        currentPanY = e.touches[0].clientY - startY;
+        img.style.transform = `translate(${currentPanX}px, ${currentPanY}px) scale(${currentScale})`;
+    }
+}
+
+function handleTouchEnd(e) {
+    if (e.touches.length < 2) initialDistance = 0;
+    if (e.touches.length === 0) isPanning = false;
+}
+
+btnCloseMediaModal.addEventListener('click', () => {
+    mediaModal.classList.add('hidden');
+    mediaModalContent.innerHTML = '';
+});
+
+btnShareMedia.addEventListener('click', async () => {
+    if (navigator.share) {
+        try {
+            if (currentMediaType === 'foto' && currentMediaBlob) {
+                // Converter base64 para File para compartilhamento de imagem
+                const response = await fetch(currentMediaBlob);
+                const blob = await response.blob();
+                const file = new File([blob], 'foto_plaubert.png', { type: blob.type });
+                
+                await navigator.share({
+                    title: 'PlauBert Note - Foto',
+                    files: [file]
+                });
+            } else if (currentMediaType === 'comentario' && currentMediaText) {
+                await navigator.share({
+                    title: 'PlauBert Note - Nota',
+                    text: currentMediaText
+                });
+            }
+        } catch (e) {
+            console.log('Erro ao compartilhar:', e);
+        }
+    } else {
+        alert('Seu dispositivo ou navegador não suporta a função de compartilhamento nativo.');
     }
 });
 

@@ -17,14 +17,14 @@ async function waitForServer() {
             splashStatusText.textContent = RETRY_MESSAGES[Math.min(attempt, RETRY_MESSAGES.length - 1)];
             const res = await fetch('/ping', { signal: AbortSignal.timeout(8000) });
             if (res.ok) {
-                // Servidor respondeu! 
-                sessionStorage.setItem('serverAwake', 'true');
+                // Servidor respondeu!
+                sessionStorage.setItem('appStarted', 'true');
                 splashStatusText.textContent = 'Pronto! ✅';
                 // Carregar limites antes de sumir a splash
                 await checkLimits();
                 setTimeout(() => {
                     splashScreen.classList.add('hidden');
-                }, 500);
+                }, 800); // 800ms para a animação de saída ficar bonita
                 return;
             }
         } catch (e) {
@@ -36,10 +36,10 @@ async function waitForServer() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Se a sessão atual já sabe que o servidor acordou, pula a splash imediatamente
-    if (sessionStorage.getItem('serverAwake') === 'true') {
-        splashScreen.classList.add('hidden');
-        checkLimits(); // Carrega em background
+    // Se a sessão já foi iniciada, NUNCA mais mostra a splash screen (apenas na abertura do app)
+    if (sessionStorage.getItem('appStarted') === 'true') {
+        splashScreen.style.display = 'none'; // Remove direto do fluxo para evitar qualquer piscar
+        checkLimits(); // Carrega limites no fundo silenciosamente
     } else {
         waitForServer();
     }
