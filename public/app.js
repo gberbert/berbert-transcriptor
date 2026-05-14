@@ -12,7 +12,6 @@ const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const continueBtn = document.getElementById('continueBtn');
 const saveBtn = document.getElementById('saveBtn');
-const historyBtn = document.getElementById('historyBtn');
 const mainControls = document.getElementById('mainControls');
 const postRecordControls = document.getElementById('postRecordControls');
 const statusText = document.getElementById('statusText');
@@ -183,10 +182,7 @@ saveBtn.addEventListener('click', async () => {
     transcricaoResult.innerHTML = '<p class="placeholder">A transcrição aparecerá aqui...</p>';
 });
 
-// Lógica de Navegação para a Tela de Histórico
-historyBtn.addEventListener('click', () => {
-    window.location.href = 'history.html';
-});
+// historyBtn removido pois usamos Bottom Tabs (links a)
 
 // RENDER FREE TIER OPTIMIZATION: Upload Assíncrono e Resiliência
 async function sendChunkToBackend(blob) {
@@ -232,7 +228,7 @@ async function sendChunkToBackend(blob) {
         }
     } finally {
         // Manter auto-scroll
-        const container = document.querySelector('.transcription-container');
-        container.scrollTop = container.scrollHeight;
+        const container = document.querySelector('.app-content');
+        if(container) container.scrollTop = container.scrollHeight;
     }
 }

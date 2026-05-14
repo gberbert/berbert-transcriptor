@@ -3,38 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#121214">
     <title>Histórico - Berbert Transcriptor</title>
     <link rel="stylesheet" href="style.css">
-    <meta name="theme-color" content="#1a1a1a">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.png" type="image/png">
 </head>
 <body>
-    <div class="app-container">
-        <header>
+    <div class="app-shell">
+        <header class="app-header">
             <div class="header-content">
-                <h1>Histórico de Reuniões</h1>
-                <button id="backHomeBtn" class="btn secondary small">Voltar ao Gravador</button>
+                <h1>Histórico <span id="app-version-display" class="version-badge"></span></h1>
+                <p class="subtitle">Suas reuniões salvas na nuvem</p>
             </div>
         </header>
 
-        <main>
-            <!-- View da Lista -->
-            <div id="listView">
-                <div id="historyList" class="history-list-page">
-                    <p class="placeholder">Carregando histórico...</p>
-                </div>
-            </div>
-
-            <!-- View do Detalhe (Oculta por padrão) -->
-            <div id="detailView" class="hidden">
-                <button id="backToListBtn" class="btn secondary small" style="margin-bottom: 1.5rem;">← Voltar para Lista</button>
-                <div class="transcription-container" style="height: 65vh;">
-                    <h2 id="detailTitle" style="margin-bottom: 0.5rem; color: var(--text-primary);"></h2>
-                    <p id="detailDate" style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;"></p>
-                    <div id="detailContent" class="transcription-content" style="white-space: pre-wrap;"></div>
-                </div>
-            </div>
+        <main class="app-content">
+            <div id="loading" class="status-indicator recording">Carregando reuniões...</div>
+            <div id="history-list" class="history-list"></div>
         </main>
+
+        <!-- Detail View (Initially Hidden) -->
+        <div id="history-detail" class="history-detail hidden">
+            <header class="detail-header">
+                <button id="backToList" class="btn-icon">
+                    <span>⬅️</span> Voltar
+                </button>
+                <h2 id="detail-title">Reunião</h2>
+                <span id="detail-date" class="detail-date"></span>
+            </header>
+            <div id="detail-content" class="detail-content transcription-box"></div>
+        </div>
+
+        <nav class="app-bottom-tabs">
+            <a href="index.html" class="tab-item">
+                <span class="tab-icon">🎙️</span>
+                <span class="tab-label">Gravar</span>
+            </a>
+            <a href="history.html" class="tab-item active">
+                <span class="tab-icon">📂</span>
+                <span class="tab-label">Histórico</span>
+            </a>
+        </nav>
     </div>
     <script src="version.js"></script>
     <script src="history.js"></script>
