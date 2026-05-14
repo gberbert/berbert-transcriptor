@@ -37,6 +37,11 @@ const reuniaoSchema = new mongoose.Schema({
         base64: String,
         minutagem: String,
         data_captura: { type: Date, default: Date.now }
+    }],
+    comentarios: [{
+        texto: String,
+        minutagem: String,
+        data_captura: { type: Date, default: Date.now }
     }]
 });
 const Reuniao = mongoose.model('Reuniao', reuniaoSchema);
@@ -282,6 +287,32 @@ app.patch('/reunioes/:id/fotos', authMiddleware, async (req, res) => {
     }
 });
 
+// 4.2. Adicionar comentário à reunião
+app.patch('/reunioes/:id/comentarios', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { texto, minutagem } = req.body;
+
+        if (!texto || texto.trim() === '') {
+            return res.status(400).json({ error: 'Texto não enviado.' });
+        }
+
+        const reuniaoAtualizada = await Reuniao.findByIdAndUpdate(
+            id,
+            { $push: { comentarios: { texto: texto.substring(0, 50), minutagem: minutagem || '' } } },
+            { new: true }
+        );
+
+        if (!reuniaoAtualizada) {
+            return res.status(404).json({ error: 'Reunião não encontrada.' });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao salvar comentário:', err);
+        res.status(500).json({ error: 'Erro ao salvar comentário.' });
+    }
+});
+
 // 5. Excluir Reunião
 app.delete('/reunioes/:id', authMiddleware, async (req, res) => {
     try {
@@ -421,18 +452,32 @@ app.post('/gerar-resumo', authMiddleware, async (req, res) => {
             systemInstruction: "Você é um arquivista neutro e preciso. Seu trabalho é ler a transcrição de áudio a seguir e criar um resumo detalhado e estritamente fiel aos fatos apresentados. JAMAIS adicione informações externas, opiniões ou invente dados. Se não houver informação suficiente, diga."
         });
         
-        // Preparar imagens se existirem
+        // Preparar imagens e comentários
         const promptParts = [];
-        let hasImages = false;
+        let hasImages = reuniao.fotos && reuniao.fotos.length > 0;
+        let hasComments = reuniao.comentarios && reuniao.comentarios.length > 0;
 
-        if (reuniao.fotos && reuniao.fotos.length > 0) {
-            hasImages = true;
+        if (hasImages) {
             console.log(`[API] Preparando ${reuniao.fotos.length} foto(s) com minutagem para a Etapa 1.`);
         }
+        if (hasComments) {
+            console.log(`[API] Preparando ${reuniao.comentarios.length} comentário(s) com minutagem para a Etapa 1.`);
+        }
 
-        const promptText = `[TRANSCRIÇÃO]:\n${transcricao}\n\n[INSTRUÇÃO]: ${hasImages ? "Analise a transcrição E AS IMAGENS EM ANEXO. Importante: Cada imagem vem acompanhada da sua 'minutagem' indicando o momento exato em que foi capturada. Descreva e correlacione as imagens com o trecho do texto correspondente àquela minutagem para extrair mais contexto. " : ""}Gere o resumo neutro e fiel agora:`;
-        
+        let instruction = "Gere o resumo neutro e fiel agora:";
+        if (hasImages || hasComments) {
+            instruction = "Analise a transcrição E OS ANEXOS (IMAGENS E/OU NOTAS DE TEXTO). Importante: Cada anexo vem acompanhado da sua 'minutagem' indicando o momento exato em que foi capturado/escrito. Descreva e correlacione esses anexos com o trecho do texto correspondente àquela minutagem para extrair o máximo de contexto. Gere o resumo neutro e fiel agora:";
+        }
+
+        const promptText = `[TRANSCRIÇÃO]:\n${transcricao}\n\n[INSTRUÇÃO]: ${instruction}`;
         promptParts.push(promptText);
+
+        if (hasComments) {
+            reuniao.comentarios.forEach((comentario, index) => {
+                const minutagemInfo = comentario.minutagem ? comentario.minutagem : "Tempo não registrado";
+                promptParts.push(`\n[NOTA RÁPIDA (POST-IT) ${index + 1} - ESCRITA EM: ${minutagemInfo}]:\n"${comentario.texto}"`);
+            });
+        }
 
         if (hasImages) {
             reuniao.fotos.forEach((foto, index) => {

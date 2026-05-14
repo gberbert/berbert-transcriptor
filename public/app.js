@@ -338,6 +338,8 @@ async function startRecording() {
         // Habilita os botões de controle
         stopBtn.disabled = false;
         if (photoBtn) photoBtn.disabled = false;
+        const commentBtn = document.getElementById('commentBtn');
+        if (commentBtn) commentBtn.disabled = false;
         
         statusIndicator.classList.add('recording');
         statusText.textContent = 'Gravando...';
@@ -379,6 +381,8 @@ stopBtn.addEventListener('click', () => {
     startBtn.classList.remove('recording');
     stopBtn.disabled = true;
     if (photoBtn) photoBtn.disabled = true;
+    const commentBtn = document.getElementById('commentBtn');
+    if (commentBtn) commentBtn.disabled = true;
     statusText.textContent = 'Gravação pausada';
 });
 
@@ -542,6 +546,114 @@ function adicionarMiniatura(base64Src, minutagem) {
     } else {
         photoThumbnails.appendChild(img);
     }
+}
+
+// ==========================================
+// NOTAS RÁPIDAS (POST-ITS)
+// ==========================================
+const commentBtn = document.getElementById('commentBtn');
+const commentModal = document.getElementById('commentModal');
+const commentInput = document.getElementById('commentInput');
+const commentCharCount = document.getElementById('commentCharCount');
+const btnCancelComment = document.getElementById('btnCancelComment');
+const btnSaveComment = document.getElementById('btnSaveComment');
+let commentMinutagem = null;
+
+if (commentBtn) {
+    commentBtn.addEventListener('click', () => {
+        if (!currentReuniaoId) {
+            alert('Aguarde o primeiro trecho de áudio ser salvo para adicionar notas.');
+            return;
+        }
+        commentMinutagem = timerElement.textContent; // Captura o tempo no clique
+        commentInput.value = '';
+        commentCharCount.textContent = '0/50';
+        commentModal.classList.remove('hidden');
+        setTimeout(() => commentInput.focus(), 100);
+    });
+}
+
+if (commentInput) {
+    commentInput.addEventListener('input', () => {
+        commentCharCount.textContent = `${commentInput.value.length}/50`;
+    });
+}
+
+if (btnCancelComment) {
+    btnCancelComment.addEventListener('click', () => {
+        commentModal.classList.add('hidden');
+    });
+}
+
+if (btnSaveComment) {
+    btnSaveComment.addEventListener('click', async () => {
+        const texto = commentInput.value.trim();
+        if (!texto) return;
+
+        btnSaveComment.textContent = 'Fixando...';
+        btnSaveComment.disabled = true;
+
+        try {
+            const res = await authFetch(`/reunioes/${currentReuniaoId}/comentarios`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ texto: texto, minutagem: commentMinutagem })
+            });
+            
+            if (!res.ok) throw new Error('Erro ao salvar comentário');
+            
+            // Adicionar miniatura visual do post-it na UI
+            adicionarMiniaturaPostit(texto, commentMinutagem);
+            
+        } catch (err) {
+            console.error('[COMMENT]', err);
+            alert('A nota foi criada, mas houve um erro ao salvá-la na nuvem.');
+        } finally {
+            commentModal.classList.add('hidden');
+            btnSaveComment.textContent = 'Fixar';
+            btnSaveComment.disabled = false;
+        }
+    });
+}
+
+function adicionarMiniaturaPostit(texto, minutagem) {
+    photoThumbnailsContainer.classList.remove('hidden');
+    const postitWrapper = document.createElement('div');
+    postitWrapper.style.position = 'relative';
+    postitWrapper.style.display = 'inline-block';
+    postitWrapper.style.width = '60px';
+    postitWrapper.style.height = '60px';
+    postitWrapper.style.background = '#fbbf24';
+    postitWrapper.style.borderRadius = '4px';
+    postitWrapper.style.padding = '4px';
+    postitWrapper.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.3)';
+    postitWrapper.style.fontFamily = "'Comic Sans MS', 'Chalkboard SE', sans-serif";
+    postitWrapper.style.color = '#000';
+    postitWrapper.style.overflow = 'hidden';
+    postitWrapper.style.transform = `rotate(${Math.random() * 10 - 5}deg)`;
+    
+    const textSpan = document.createElement('div');
+    textSpan.textContent = texto;
+    textSpan.style.fontSize = '0.5rem';
+    textSpan.style.lineHeight = '1.2';
+    textSpan.style.wordBreak = 'break-word';
+    postitWrapper.appendChild(textSpan);
+    
+    if (minutagem) {
+        const timeLabel = document.createElement('span');
+        timeLabel.textContent = minutagem;
+        timeLabel.style.position = 'absolute';
+        timeLabel.style.bottom = '2px';
+        timeLabel.style.right = '2px';
+        timeLabel.style.background = 'rgba(0,0,0,0.5)';
+        timeLabel.style.color = '#fff';
+        timeLabel.style.fontSize = '0.5rem';
+        timeLabel.style.padding = '1px 3px';
+        timeLabel.style.borderRadius = '2px';
+        postitWrapper.appendChild(timeLabel);
+    }
+    
+    photoThumbnails.appendChild(postitWrapper);
 }
 
 // ==========================================

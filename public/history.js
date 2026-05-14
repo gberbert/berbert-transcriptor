@@ -149,64 +149,104 @@ function openDetail(index) {
     detailDate.textContent = new Date(reuniao.data_reuniao).toLocaleString('pt-BR');
     detailContent.textContent = reuniao.conteudo_transcrito;
     
-    // Carregar fotos se houver
+    // Carregar fotos e comentários se houver
     const photosContainer = document.getElementById('detail-photos-container');
     photosContainer.innerHTML = '';
     
-    if (reuniao.fotos && reuniao.fotos.length > 0) {
+    // Mesclar fotos e comentários em uma única timeline
+    let timelineItems = [];
+    
+    if (reuniao.fotos) {
+        reuniao.fotos.forEach(foto => {
+            timelineItems.push({ type: 'foto', data: foto.base64, minutagem: foto.minutagem });
+        });
+    }
+    
+    if (reuniao.comentarios) {
+        reuniao.comentarios.forEach(comentario => {
+            timelineItems.push({ type: 'comentario', data: comentario.texto, minutagem: comentario.minutagem });
+        });
+    }
+    
+    if (timelineItems.length > 0) {
         photosContainer.classList.remove('hidden');
+        
+        // Função auxiliar para converter "HH:MM:SS" em segundos
+        const timeToSec = (timeStr) => {
+            if (!timeStr) return 0;
+            const parts = timeStr.split(':');
+            if (parts.length === 3) {
+                return parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]);
+            }
+            return 0;
+        };
+        
+        // Ordenar cronologicamente
+        timelineItems.sort((a, b) => timeToSec(a.minutagem) - timeToSec(b.minutagem));
         
         let lastTimeSec = 0;
         
-        reuniao.fotos.forEach(foto => {
-            // Converter minutagem "HH:MM:SS" para segundos
-            let currentTimeSec = 0;
-            if (foto.minutagem) {
-                const parts = foto.minutagem.split(':');
-                if (parts.length === 3) {
-                    currentTimeSec = parseInt(parts[0])*3600 + parseInt(parts[1])*60 + parseInt(parts[2]);
-                }
-            }
+        timelineItems.forEach(item => {
+            let currentTimeSec = timeToSec(item.minutagem);
             
             let deltaSec = currentTimeSec - lastTimeSec;
             if (deltaSec < 0) deltaSec = 0;
             lastTimeSec = currentTimeSec;
             
             // Escala: 1 segundo = 1.5 pixels de margem. 
-            // Limitar a margem máxima para evitar buracos gigantes na tela (ex: max 150px)
-            // Margem mínima de 10px para não ficarem coladas
             const marginTop = Math.min(Math.max(deltaSec * 1.5, 10), 150);
             
-            const imgWrapper = document.createElement('div');
-            imgWrapper.style.position = 'relative';
-            imgWrapper.style.marginTop = `${marginTop}px`;
-            imgWrapper.style.display = 'flex';
-            imgWrapper.style.flexDirection = 'column';
-            imgWrapper.style.alignItems = 'center';
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'relative';
+            wrapper.style.marginTop = `${marginTop}px`;
+            wrapper.style.display = 'flex';
+            wrapper.style.flexDirection = 'column';
+            wrapper.style.alignItems = 'center';
 
-            const img = document.createElement('img');
-            img.src = foto.base64;
-            img.className = 'photo-thumbnail';
-            img.style.width = '70px';
-            img.style.height = '70px';
-            img.style.objectFit = 'cover';
-            img.style.borderRadius = '8px';
-            img.style.cursor = 'pointer';
-            
-            img.onclick = () => {
-                const w = window.open('');
-                w.document.write(`<img src="${foto.base64}" style="max-width: 100%;">`);
-            };
+            if (item.type === 'foto') {
+                const img = document.createElement('img');
+                img.src = item.data;
+                img.className = 'photo-thumbnail';
+                img.style.width = '70px';
+                img.style.height = '70px';
+                img.style.objectFit = 'cover';
+                img.style.borderRadius = '8px';
+                img.style.cursor = 'pointer';
+                img.onclick = () => {
+                    const w = window.open('');
+                    w.document.write(`<img src="${item.data}" style="max-width: 100%;">`);
+                };
+                wrapper.appendChild(img);
+            } else if (item.type === 'comentario') {
+                const postit = document.createElement('div');
+                postit.style.width = '70px';
+                postit.style.height = '70px';
+                postit.style.background = '#fbbf24';
+                postit.style.borderRadius = '4px';
+                postit.style.padding = '4px';
+                postit.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.3)';
+                postit.style.fontFamily = "'Comic Sans MS', 'Chalkboard SE', sans-serif";
+                postit.style.color = '#000';
+                postit.style.overflow = 'hidden';
+                postit.style.transform = `rotate(${Math.random() * 10 - 5}deg)`;
+                
+                const textSpan = document.createElement('div');
+                textSpan.textContent = item.data;
+                textSpan.style.fontSize = '0.55rem';
+                textSpan.style.lineHeight = '1.2';
+                textSpan.style.wordBreak = 'break-word';
+                postit.appendChild(textSpan);
+                wrapper.appendChild(postit);
+            }
             
             const timeLabel = document.createElement('span');
-            timeLabel.textContent = foto.minutagem || '--:--';
+            timeLabel.textContent = item.minutagem || '--:--';
             timeLabel.style.fontSize = '0.65rem';
             timeLabel.style.color = 'var(--text-secondary)';
             timeLabel.style.marginTop = '4px';
 
-            imgWrapper.appendChild(img);
-            imgWrapper.appendChild(timeLabel);
-            photosContainer.appendChild(imgWrapper); // Append to sidebar container directly
+            wrapper.appendChild(timeLabel);
+            photosContainer.appendChild(wrapper);
         });
     } else {
         photosContainer.classList.add('hidden');
