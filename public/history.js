@@ -22,7 +22,7 @@ let reuniaoAtual = null;
 
 async function loadHistory() {
     try {
-        const response = await fetch('/reunioes');
+        const response = await authFetch('/reunioes');
         const data = await response.json();
         
         if (loadingIndicator) loadingIndicator.style.display = 'none';
@@ -102,7 +102,7 @@ async function loadHistory() {
             actionsDiv.querySelector('.swipe-action-edit').addEventListener('click', () => {
                 const novoTitulo = prompt("Novo título para a transcrição:", reuniao.titulo || "Reunião Sem Título");
                 if (novoTitulo) {
-                    fetch('/reunioes/' + reuniao._id, {
+                    authFetch('/reunioes/' + reuniao._id, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ titulo: novoTitulo })
@@ -113,7 +113,7 @@ async function loadHistory() {
             // Delete logic
             actionsDiv.querySelector('.swipe-action-delete').addEventListener('click', () => {
                 if(confirm("Tem certeza que deseja excluir esta transcrição? (Os resumos vinculados também sumirão)")) {
-                    fetch('/reunioes/' + reuniao._id, { method: 'DELETE' })
+                    authFetch('/reunioes/' + reuniao._id, { method: 'DELETE' })
                     .then(() => loadHistory());
                 }
             });
@@ -191,7 +191,7 @@ btnSubmitSummary.addEventListener('click', async () => {
     summaryLoadingText.classList.remove('hidden');
     
     try {
-        const response = await fetch('/gerar-resumo', {
+        const response = await authFetch('/gerar-resumo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

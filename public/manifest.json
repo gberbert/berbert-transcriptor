@@ -1,11 +1,11 @@
 {
-  "name": "Berbert Transcriptor",
-  "short_name": "Transcriptor",
+  "name": "PlauBert Note",
+  "short_name": "PlauBert",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#121214",
   "theme_color": "#121214",
-  "description": "Aplicativo PWA para gravação e transcrição de reuniões usando o Gemini.",
+  "description": "App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras",
   "icons": [
     {
       "src": "icon.png",

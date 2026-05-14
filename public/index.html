@@ -4,21 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#121214">
-    <title>Berbert Transcriptor</title>
+    <title>PlauBert Note</title>
+    
+    <!-- SEO & Social Preview (WhatsApp, Teams, Instagram) -->
+    <meta name="description" content="App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras">
+    <meta property="og:title" content="PlauBert Note">
+    <meta property="og:description" content="App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras">
+    <meta property="og:image" content="icon.png">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="PlauBert Note">
+    <meta name="twitter:description" content="App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras">
+    <meta name="twitter:image" content="icon.png">
+
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.png" type="image/png">
 </head>
 <body>
+    <!-- SPLASH SCREEN: Visível até o servidor Render acordar -->
+    <div id="splash-screen">
+        <div class="splash-content">
+            <div class="splash-logo">🎙️</div>
+            <h1 class="splash-title">PlauBert Note</h1>
+            <p class="splash-subtitle">Transcrição com IA</p>
+            <div class="splash-loader">
+                <div class="splash-bar"></div>
+            </div>
+            <p id="splash-status-text" class="splash-status">Conectando ao servidor...</p>
+        </div>
+    </div>
+
     <div class="app-shell">
         <header class="app-header">
             <div class="header-content">
                 <h1>Gravação <span id="app-version-display" class="version-badge"></span></h1>
-                <p class="subtitle">Transcrição Contínua com IA</p>
+                <div class="user-badge">
+                    <span id="userEmailDisplay"></span>
+                    <button class="btn-logout" onclick="logout()">Sair</button>
+                </div>
             </div>
         </header>
 
         <main class="app-content">
+            <div id="limit-banner" class="limit-banner hidden"></div>
             <div class="recording-top-area">
                 <div id="status" class="status-indicator">Pronto para iniciar</div>
                 
@@ -62,6 +91,7 @@
     </div>
     
     <script src="version.js"></script>
+    <script src="auth-helper.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

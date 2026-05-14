@@ -1,12 +1,44 @@
-// RENDER FREE TIER OPTIMIZATION: Mitigação de Cold Start (Render Sleep)
-// Acordar o servidor imediatamente ao carregar a página
+// SPLASH SCREEN: Aguarda servidor Render acordar com polling
+const splashScreen = document.getElementById('splash-screen');
+const splashStatusText = document.getElementById('splash-status-text');
+
+const RETRY_MESSAGES = [
+    'Conectando ao servidor...',
+    'Servidor dormindo, acordando... ☕',
+    'Isso pode levar até 30 segundos...',
+    'Quase lá, aguarde um momento...',
+    'Servidor acordando, já volto...',
+];
+
+async function waitForServer() {
+    let attempt = 0;
+    while (true) {
+        try {
+            splashStatusText.textContent = RETRY_MESSAGES[Math.min(attempt, RETRY_MESSAGES.length - 1)];
+            const res = await fetch('/ping', { signal: AbortSignal.timeout(8000) });
+            if (res.ok) {
+                // Servidor respondeu! Fade out da splash
+                splashStatusText.textContent = 'Pronto! ✅';
+                // Carregar limites antes de sumir a splash
+                await checkLimits();
+                setTimeout(() => {
+                    splashScreen.classList.add('hidden');
+                }, 500);
+                return;
+            }
+        } catch (e) {
+            // Timeout ou erro de rede — servidor ainda dormindo, tenta de novo
+        }
+        attempt++;
+        await new Promise(r => setTimeout(r, 3000)); // Espera 3s antes de tentar de novo
+    }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
-    console.log('[CLIENT] Enviando ping para acordar o servidor...');
-    fetch('/ping')
-        .then(res => res.text())
-        .then(text => console.log('[CLIENT] Servidor acordou:', text))
-        .catch(err => console.error('[CLIENT] Erro ao acordar o servidor:', err));
+    waitForServer();
 });
+
+
 
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -25,6 +57,49 @@ let timerInterval = null;
 let secondsRecorded = 0;
 let isRecordingIntentionally = false;
 let chunkIntervalTimer = null;
+let currentReuniaoId = null; // ID do registro atual no banco (salva a cada chunk)
+let limiteAtingido = false;  // Flag que bloqueia o início da gravação
+
+// Verificar limites de uso ao carregar a tela
+async function checkLimits() {
+    try {
+        const res = await authFetch('/user/limits');
+        if (!res || !res.ok) return;
+        const data = await res.json();
+
+        const { transcricoes } = data;
+        const limiteBanner = document.getElementById('limit-banner');
+
+        if (transcricoes.usado >= transcricoes.limite) {
+            limiteAtingido = true;
+            startBtn.disabled = true;
+            startBtn.style.opacity = '0.4';
+            startBtn.style.cursor = 'not-allowed';
+            statusText.textContent = '';
+            if (limiteBanner) {
+                limiteBanner.innerHTML = `
+                    ⚠️ <strong>Limite de transcrições atingido</strong> (${transcricoes.usado}/${transcricoes.limite})<br>
+                    <small>Acesse <a href="history.html" style="color:var(--primary-color)">Transcrições</a> e exclua gravações antigas para liberar espaço.</small>
+                `;
+                limiteBanner.classList.remove('hidden');
+            }
+        } else {
+            // Liberar UI se estava bloqueada
+            limiteAtingido = false;
+            startBtn.disabled = false;
+            startBtn.style.opacity = '1';
+            startBtn.style.cursor = 'pointer';
+            if (limiteBanner) limiteBanner.classList.add('hidden');
+
+            // Mostrar contador no status
+            if (statusText && !isRecordingIntentionally) {
+                statusText.textContent = `Toque no microfone para iniciar. (${transcricoes.usado}/${transcricoes.limite} transcrições usadas)`;
+            }
+        }
+    } catch (e) {
+        console.warn('[LIMITS] Não foi possível verificar os limites.', e);
+    }
+}
 
 function updateTimer() {
     secondsRecorded++;
@@ -63,6 +138,10 @@ function releaseWakeLock() {
 
 // Função central para iniciar/continuar gravação
 async function startRecording() {
+    if (limiteAtingido) {
+        alert('Limite de transcrições atingido. Por favor, exclua algumas para continuar.');
+        return;
+    }
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
@@ -161,33 +240,38 @@ stopBtn.addEventListener('click', () => {
     statusText.textContent = 'Gravação pausada';
 });
 
-// Salvar a transcrição
+// Salvar / Finalizar a transcrição
 saveBtn.addEventListener('click', async () => {
-    // Clonar o resultado e remover spans de status temporários
-    const resultClone = transcricaoResult.cloneNode(true);
-    const tempSpans = resultClone.querySelectorAll('span[style*="var(--text-secondary)"], span[style*="var(--danger-color)"]');
-    tempSpans.forEach(span => span.remove());
-    
-    const textToSave = resultClone.innerText.trim();
-    if (!textToSave || textToSave === 'A transcrição aparecerá aqui...') {
-        alert('Não há transcrição para salvar.');
-        return;
-    }
+    // Se já foi salvo no banco via chunks, só precisamos resetar a UI
+    if (currentReuniaoId) {
+        statusText.textContent = 'Transcrição finalizada! ✅';
+    } else {
+        // Fallback: salva tudo de uma vez caso nenhum chunk tenha sido transcrito ainda
+        const resultClone = transcricaoResult.cloneNode(true);
+        const tempSpans = resultClone.querySelectorAll('span[style*="var(--text-secondary)"], span[style*="var(--danger-color)"]');
+        tempSpans.forEach(span => span.remove());
+        
+        const textToSave = resultClone.innerText.trim();
+        if (!textToSave || textToSave === 'A transcrição aparecerá aqui...') {
+            alert('Não há transcrição para salvar.');
+            return;
+        }
 
-    // Salvar no Banco de Dados MongoDB via Backend
-    try {
-        statusText.textContent = 'Salvando no histórico...';
-        await fetch('/salvar-reuniao', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conteudo_transcrito: textToSave })
-        });
-    } catch(e) {
-        console.error('[CLIENT] Erro ao salvar no BD:', e);
-        alert('Erro ao salvar no banco. Baixando o arquivo de texto.');
+        try {
+            statusText.textContent = 'Salvando no histórico...';
+            await authFetch('/salvar-reuniao', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conteudo_transcrito: textToSave })
+            });
+        } catch(e) {
+            console.error('[CLIENT] Erro ao salvar no BD:', e);
+            alert('Erro ao salvar no banco.');
+        }
     }
 
     // Resetar UI para novo uso
+    currentReuniaoId = null;
     mainControls.classList.remove('hidden');
     postRecordControls.classList.add('hidden');
     startBtn.classList.remove('recording');
@@ -199,6 +283,9 @@ saveBtn.addEventListener('click', async () => {
     
     statusText.textContent = 'Pronto para gravar';
     transcricaoResult.innerHTML = '<p class="placeholder">A transcrição aparecerá aqui...</p>';
+    
+    // Atualizar limites após salvar novo item
+    checkLimits();
 });
 
 // historyBtn removido pois usamos Bottom Tabs (links a)
@@ -217,7 +304,7 @@ async function sendChunkToBackend(blob) {
 
     try {
         console.log(`[CLIENT] Enviando chunk para o backend...`);
-        const response = await fetch('/transcrever', {
+        const response = await authFetch('/transcrever', {
             method: 'POST',
             body: formData
         });
@@ -229,25 +316,69 @@ async function sendChunkToBackend(blob) {
         const data = await response.json();
         const resultElement = document.getElementById(tempId);
         
-        // Usar data.texto de acordo com os requisitos
         if (resultElement && data.texto) {
             resultElement.textContent = data.texto + ' ';
             resultElement.style.color = 'var(--text-primary)';
             resultElement.className = 'chunk-text';
             resultElement.removeAttribute('id');
+
+            // PERSIST: Salvar no banco a cada chunk transcrito com sucesso
+            if (!currentReuniaoId) {
+                // Primeira vez: cria um novo registro no banco
+                try {
+                    const saveRes = await authFetch('/salvar-reuniao', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conteudo_transcrito: data.texto })
+                    });
+                    const saveData = await saveRes.json();
+                    if (saveData.reuniao && saveData.reuniao._id) {
+                        currentReuniaoId = saveData.reuniao._id;
+                        console.log(`[PERSIST] Novo registro criado no banco. ID: ${currentReuniaoId}`);
+                    }
+                } catch(e) {
+                    console.error('[PERSIST] Falha ao criar registro inicial:', e);
+                }
+            } else {
+                // Chunks seguintes: acrescenta ao registro existente
+                try {
+                    await authFetch(`/reunioes/${currentReuniaoId}/append`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ novo_texto: data.texto })
+                    });
+                    console.log(`[PERSIST] Chunk acrescentado ao registro ID: ${currentReuniaoId}`);
+                } catch(e) {
+                    console.error('[PERSIST] Falha ao acrescentar chunk:', e);
+                }
+            }
         }
 
     } catch (error) {
-        // RENDER FREE TIER OPTIMIZATION: Falhas de rede não param a gravação contínua do MediaRecorder
-        console.error(`[CLIENT] Erro de rede ou timeout ao transcrever chunk. A gravação continua. Erro:`, error);
+        console.error(`[CLIENT] Erro de rede ou timeout ao transcrever chunk:`, error);
         const resultElement = document.getElementById(tempId);
         if (resultElement) {
             resultElement.textContent = ' [Erro de conexão neste trecho] ';
             resultElement.style.color = 'var(--danger-color)';
         }
     } finally {
-        // Manter auto-scroll
         const container = document.querySelector('.app-content');
         if(container) container.scrollTop = container.scrollHeight;
     }
 }
+
+// BACKGROUND FAILSAFE: Salva a gravação automaticamente se o app for minimizado
+document.addEventListener("visibilitychange", () => {
+    // Se o usuário saiu do app e estava gravando
+    if (document.visibilityState === 'hidden' && isRecordingIntentionally) {
+        console.log('[BACKGROUND] App minimizado. Pausando e salvando a gravação por segurança.');
+        
+        // 1. Para a gravação
+        stopBtn.click();
+        
+        // 2. Dá 2 segundos de margem para o último chunk subir para o servidor, então salva.
+        setTimeout(() => {
+            saveBtn.click();
+        }, 2000);
+    }
+});

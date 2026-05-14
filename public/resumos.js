@@ -20,7 +20,7 @@ let resumoAtual = null;
 
 async function loadResumos() {
     try {
-        const response = await fetch('/resumos');
+        const response = await authFetch('/resumos');
         const data = await response.json();
         
         if (loadingIndicator) loadingIndicator.style.display = 'none';
@@ -108,7 +108,7 @@ async function loadResumos() {
             // Delete logic from swipe
             actionsDiv.querySelector('.swipe-action-delete').addEventListener('click', () => {
                 if(confirm("Tem certeza que deseja excluir permanentemente este resumo?")) {
-                    fetch('/resumos/' + resumo._id, { method: 'DELETE' })
+                    authFetch('/resumos/' + resumo._id, { method: 'DELETE' })
                     .then(() => loadResumos());
                 }
             });
@@ -194,7 +194,7 @@ btnSaveEdit.addEventListener('click', async () => {
     btnSaveEdit.textContent = 'Salvando...';
     
     try {
-        const response = await fetch('/resumos/' + resumoAtual._id, {
+        const response = await authFetch('/resumos/' + resumoAtual._id, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ texto_resumo: novoTexto })
@@ -231,7 +231,7 @@ btnDeleteResumo.addEventListener('click', async () => {
     btnDeleteResumo.disabled = true;
     
     try {
-        const response = await fetch('/resumos/' + resumoAtual._id, { method: 'DELETE' });
+        const response = await authFetch('/resumos/' + resumoAtual._id, { method: 'DELETE' });
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         

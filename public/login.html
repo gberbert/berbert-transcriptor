@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#121214">
+    <title>Entrar - PlauBert Note</title>
+
+    <!-- SEO & Social Preview -->
+    <meta name="description" content="App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras">
+    <meta property="og:title" content="Entrar - PlauBert Note">
+    <meta property="og:description" content="App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras">
+    <meta property="og:image" content="icon.png">
+    <meta property="og:type" content="website">
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.png" type="image/png">
+</head>
+<body>
+    <!-- SPLASH SCREEN -->
+    <div id="splash-screen">
+        <div class="splash-content">
+            <div class="splash-logo">🎙️</div>
+            <h1 class="splash-title">PlauBert Note</h1>
+            <p class="splash-subtitle">Transcrição com IA</p>
+            <div class="splash-loader"><div class="splash-bar"></div></div>
+            <p id="splash-status-text" class="splash-status">Conectando ao servidor...</p>
+        </div>
+    </div>
+
+    <div class="app-shell">
+        <header class="app-header">
+            <div class="header-content">
+                <h1>PlauBert Note</h1>
+                <p class="subtitle">Sua conta de transcrições com IA</p>
+            </div>
+        </header>
+
+        <main class="app-content" style="justify-content: center;">
+            <div class="auth-card">
+                <!-- Tabs Login / Cadastro -->
+                <div class="auth-tabs">
+                    <button id="tabLogin" class="auth-tab active" onclick="showTab('login')">Entrar</button>
+                    <button id="tabRegister" class="auth-tab" onclick="showTab('register')">Criar Conta</button>
+                </div>
+
+                <!-- LOGIN FORM -->
+                <form id="loginForm" class="auth-form" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="loginEmail">E-mail</label>
+                        <input type="email" id="loginEmail" class="form-input" placeholder="seu@email.com" required autocomplete="email">
+                        <span class="field-error" id="loginEmailError"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Senha</label>
+                        <input type="password" id="loginPassword" class="form-input" placeholder="Sua senha" required autocomplete="current-password">
+                        <span class="field-error" id="loginPasswordError"></span>
+                    </div>
+                    <p class="form-error hidden" id="loginError"></p>
+                    <button type="submit" class="btn primary" id="loginBtn">Entrar</button>
+                </form>
+
+                <!-- REGISTER FORM -->
+                <form id="registerForm" class="auth-form hidden" onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="registerEmail">E-mail</label>
+                        <input type="email" id="registerEmail" class="form-input" placeholder="seu@email.com" required autocomplete="email">
+                        <span class="field-error" id="registerEmailError"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Senha</label>
+                        <input type="password" id="registerPassword" class="form-input" placeholder="Mínimo 6 caracteres" required autocomplete="new-password">
+                        <span class="field-error" id="registerPasswordError"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerConfirm">Confirmar Senha</label>
+                        <input type="password" id="registerConfirm" class="form-input" placeholder="Repita a senha" required autocomplete="new-password">
+                        <span class="field-error" id="registerConfirmError"></span>
+                    </div>
+                    <p class="form-error hidden" id="registerError"></p>
+                    <button type="submit" class="btn primary" id="registerBtn">Criar Conta</button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script src="auth.js"></script>
+</body>
+</html>

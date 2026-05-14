@@ -7,6 +7,8 @@ const { GoogleAIFileManager } = require('@google/generative-ai/files');
 const path = require('path');
 const fs = require('fs');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 dotenv.config();
 
@@ -17,16 +19,26 @@ if (process.env.MONGO_URI) {
       .catch(err => console.error('[DATABASE ERROR] Failed to connect to MongoDB:', err));
 }
 
-// Definir Schema de Reunião
+// Definir Schema de Usuário
+const userSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password_hash: { type: String, required: true },
+    created_at: { type: Date, default: Date.now }
+});
+const User = mongoose.model('User', userSchema);
+
+// Definir Schema de Reunião (com user_id)
 const reuniaoSchema = new mongoose.Schema({
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false }, // false para não quebrar dados antigos
     data_reuniao: { type: Date, default: Date.now },
     conteudo_transcrito: String,
     titulo: String
 });
 const Reuniao = mongoose.model('Reuniao', reuniaoSchema);
 
-// Definir Schema de Resumo
+// Definir Schema de Resumo (com user_id)
 const resumoSchema = new mongoose.Schema({
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
     reuniao_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Reuniao' },
     titulo_reuniao: String,
     tipo: String,
@@ -57,21 +69,118 @@ const upload = multer({ dest: uploadDir });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
 
+// ==================
+// AUTH MIDDLEWARE
+// ==================
+const JWT_SECRET = process.env.JWT_SECRET || 'plaubert-secret-key-change-in-production';
+
+function authMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Não autorizado. Faça login primeiro.' });
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded; // { id, email }
+        next();
+    } catch (e) {
+        return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
+    }
+}
+
+// ==================
+// ROTAS DE AUTH
+// ==================
+
+// Registro
+app.post('/auth/register', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+    
+    try {
+        const existente = await User.findOne({ email });
+        if (existente) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+        
+        const password_hash = await bcrypt.hash(password, 10);
+        const novoUser = new User({ email, password_hash });
+        await novoUser.save();
+        
+        const token = jwt.sign({ id: novoUser._id, email: novoUser.email }, JWT_SECRET, { expiresIn: '30d' });
+        res.status(201).json({ success: true, token, email: novoUser.email });
+    } catch (err) {
+        console.error('[AUTH ERROR] Registro:', err);
+        res.status(500).json({ error: 'Erro ao criar usuário.' });
+    }
+});
+
+// Login
+app.post('/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+    
+    try {
+        const user = await User.findOne({ email });
+        if (!user) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+        
+        const senhaOk = await bcrypt.compare(password, user.password_hash);
+        if (!senhaOk) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+        
+        const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+        res.json({ success: true, token, email: user.email });
+    } catch (err) {
+        console.error('[AUTH ERROR] Login:', err);
+        res.status(500).json({ error: 'Erro ao fazer login.' });
+    }
+});
+
 // RENDER FREE TIER OPTIMIZATION: Rota de Wake-up para evitar/mitigar Cold Starts.
 // Retorna 200 OK imediatamente para acordar o servidor e para monitoramento via UptimeRobot.
 app.get('/ping', (req, res) => {
     res.status(200).send('pong');
 });
 
+// ==================
+// LIMITES DE USO
+// ==================
+const LIMITE_TRANSCRICOES = 10;
+const LIMITE_RESUMOS = 20;
+
+// Rota para consultar uso atual do usuário
+app.get('/user/limits', authMiddleware, async (req, res) => {
+    try {
+        const [totalTranscricoes, totalResumos] = await Promise.all([
+            Reuniao.countDocuments({ user_id: req.user.id }),
+            Resumo.countDocuments({ user_id: req.user.id })
+        ]);
+        res.json({
+            transcricoes: { usado: totalTranscricoes, limite: LIMITE_TRANSCRICOES },
+            resumos: { usado: totalResumos, limite: LIMITE_RESUMOS }
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Erro ao verificar limites.' });
+    }
+});
+
 // Rotas de Histórico
-app.post('/salvar-reuniao', async (req, res) => {
+app.post('/salvar-reuniao', authMiddleware, async (req, res) => {
     if (!process.env.MONGO_URI) {
         return res.status(500).json({ error: 'MongoDB não configurado (.env ausente).' });
     }
     
     try {
+        // Verificar limite de transcrições
+        const totalTranscricoes = await Reuniao.countDocuments({ user_id: req.user.id });
+        if (totalTranscricoes >= LIMITE_TRANSCRICOES) {
+            return res.status(429).json({ 
+                error: `Limite de ${LIMITE_TRANSCRICOES} transcrições atingido. Exclua transcrições antigas para continuar.`,
+                limitReached: true
+            });
+        }
+
         const { conteudo_transcrito, titulo } = req.body;
         const novaReuniao = new Reuniao({
+            user_id: req.user.id,
             conteudo_transcrito,
             titulo: titulo || `Reunião ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`
         });
@@ -83,13 +192,13 @@ app.post('/salvar-reuniao', async (req, res) => {
     }
 });
 
-app.get('/reunioes', async (req, res) => {
+app.get('/reunioes', authMiddleware, async (req, res) => {
     if (!process.env.MONGO_URI) {
         return res.status(500).json({ error: 'MongoDB não configurado.' });
     }
 
     try {
-        const reunioes = await Reuniao.find().sort({ data_reuniao: -1 });
+        const reunioes = await Reuniao.find({ user_id: req.user.id }).sort({ data_reuniao: -1 });
         res.json(reunioes);
     } catch (err) {
         console.error('[DATABASE ERROR] Erro ao listar reuniões:', err);
@@ -97,8 +206,8 @@ app.get('/reunioes', async (req, res) => {
     }
 });
 
-// 3. Editar Reunião
-app.put('/reunioes/:id', async (req, res) => {
+// 3. Editar Reunião (substituição completa)
+app.put('/reunioes/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const { conteudo_transcrito, titulo } = req.body;
@@ -119,8 +228,31 @@ app.put('/reunioes/:id', async (req, res) => {
     }
 });
 
-// 4. Excluir Reunião
-app.delete('/reunioes/:id', async (req, res) => {
+// 4. Append de texto (para gravação chunk a chunk)
+app.patch('/reunioes/:id/append', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { novo_texto } = req.body;
+
+        // Usa $concat via update para acrescentar sem sobrescrever
+        const reuniaoAtualizada = await Reuniao.findByIdAndUpdate(
+            id,
+            { $set: { conteudo_transcrito: await Reuniao.findById(id).then(r => (r.conteudo_transcrito || '') + ' ' + novo_texto) } },
+            { new: true }
+        );
+
+        if (!reuniaoAtualizada) {
+            return res.status(404).json({ error: 'Reunião não encontrada.' });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao fazer append no chunk:', err);
+        res.status(500).json({ error: 'Erro ao salvar chunk.' });
+    }
+});
+
+// 5. Excluir Reunião
+app.delete('/reunioes/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const reuniaoDeletada = await Reuniao.findByIdAndDelete(id);
@@ -138,7 +270,7 @@ app.delete('/reunioes/:id', async (req, res) => {
     }
 });
 
-app.post('/transcrever', upload.single('audio'), async (req, res) => {
+app.post('/transcrever', authMiddleware, upload.single('audio'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'Nenhum arquivo de áudio recebido.' });
     }
@@ -222,9 +354,22 @@ app.post('/transcrever', upload.single('audio'), async (req, res) => {
 // ==================
 
 // 1. Gerar e Salvar Resumo
-app.post('/gerar-resumo', async (req, res) => {
+app.post('/gerar-resumo', authMiddleware, async (req, res) => {
     if (!process.env.MONGO_URI || !process.env.GEMINI_API_KEY) {
         return res.status(500).json({ error: 'Falta configuração de banco de dados ou chave de API.' });
+    }
+
+    // Verificar limite de resumos
+    try {
+        const totalResumos = await Resumo.countDocuments({ user_id: req.user.id });
+        if (totalResumos >= LIMITE_RESUMOS) {
+            return res.status(429).json({
+                error: `Limite de ${LIMITE_RESUMOS} resumos atingido. Exclua resumos antigos para continuar.`,
+                limitReached: true
+            });
+        }
+    } catch (err) {
+        return res.status(500).json({ error: 'Erro ao verificar limites.' });
     }
 
     try {
@@ -276,6 +421,7 @@ app.post('/gerar-resumo', async (req, res) => {
 
         // Salvar o resumo gerado no banco de dados
         const novoResumo = new Resumo({
+            user_id: req.user.id,
             reuniao_id: reuniao._id,
             titulo_reuniao: reuniao.titulo,
             tipo: tipo,
@@ -293,9 +439,9 @@ app.post('/gerar-resumo', async (req, res) => {
 });
 
 // 2. Listar Resumos
-app.get('/resumos', async (req, res) => {
+app.get('/resumos', authMiddleware, async (req, res) => {
     try {
-        const resumos = await Resumo.find().sort({ data_geracao: -1 });
+        const resumos = await Resumo.find({ user_id: req.user.id }).sort({ data_geracao: -1 });
         res.json(resumos);
     } catch (err) {
         console.error('[DATABASE ERROR] Erro ao listar resumos:', err);
@@ -304,7 +450,7 @@ app.get('/resumos', async (req, res) => {
 });
 
 // 3. Editar Resumo
-app.put('/resumos/:id', async (req, res) => {
+app.put('/resumos/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const { texto_resumo } = req.body;
@@ -326,7 +472,7 @@ app.put('/resumos/:id', async (req, res) => {
 });
 
 // 4. Excluir Resumo
-app.delete('/resumos/:id', async (req, res) => {
+app.delete('/resumos/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const resumoDeletado = await Resumo.findByIdAndDelete(id);

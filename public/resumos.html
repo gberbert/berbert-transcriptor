@@ -4,7 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#121214">
-    <title>Resumos - Berbert Transcriptor</title>
+    <title>Resumos - PlauBert Note</title>
+
+    <!-- SEO & Social Preview -->
+    <meta name="description" content="App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras">
+    <meta property="og:title" content="Resumos - PlauBert Note">
+    <meta property="og:description" content="App criado por Gustavo Berbert durante o evento StartSe para apoio a gravação das palestras">
+    <meta property="og:image" content="icon.png">
+    <meta property="og:type" content="website">
+
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.png" type="image/png">
@@ -14,7 +22,10 @@
         <header class="app-header">
             <div class="header-content">
                 <h1>Resumos <span id="app-version-display" class="version-badge"></span></h1>
-                <p class="subtitle">Resumos gerados por Inteligência Artificial</p>
+                <div class="user-badge">
+                    <span id="userEmailDisplay"></span>
+                    <button class="btn-logout" onclick="logout()">Sair</button>
+                </div>
             </div>
         </header>
 
@@ -72,6 +83,7 @@
         </nav>
     </div>
     <script src="version.js"></script>
+    <script src="auth-helper.js"></script>
     <script src="resumos.js"></script>
 </body>
 </html>

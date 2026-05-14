@@ -1,3 +1,96 @@
+/* ===========================
+   SPLASH SCREEN
+   =========================== */
+#splash-screen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: #121214;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+#splash-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.splash-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 40px;
+    text-align: center;
+}
+
+.splash-logo {
+    font-size: 4rem;
+    animation: splash-pulse 2s infinite;
+    filter: drop-shadow(0 0 20px rgba(130, 87, 229, 0.8));
+}
+
+@keyframes splash-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.85; }
+}
+
+.splash-title {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #8257e5, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+}
+
+.splash-subtitle {
+    font-size: 0.9rem;
+    color: #a8a8b3;
+    margin: 0;
+    letter-spacing: 0.05em;
+}
+
+.splash-loader {
+    width: 200px;
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 16px;
+}
+
+.splash-bar {
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, #8257e5, #c084fc);
+    border-radius: 4px;
+    animation: splash-slide 1.5s ease-in-out infinite;
+}
+
+@keyframes splash-slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+}
+
+.splash-status {
+    font-size: 0.78rem;
+    color: #6e6e7a;
+    margin: 0;
+    letter-spacing: 0.02em;
+    min-height: 1.2em;
+}
+
+/* ===========================
+   APP STYLES
+   =========================== */
+
+
 :root {
     --primary-color: #8257e5; /* Neon Purple */
     --primary-hover: #9f75ff;
@@ -9,6 +102,133 @@
     --success-color: #04d361;
     --border-color: rgba(255, 255, 255, 0.05);
     --glass-bg: rgba(18, 18, 20, 0.8);
+}
+
+/* ===========================
+   AUTH CARD
+   =========================== */
+.auth-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--bg-panel);
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+}
+
+.auth-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 14px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+}
+
+.auth-tab.active {
+    color: var(--primary-color);
+    background: rgba(130, 87, 229, 0.08);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.auth-form {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.field-error {
+    font-size: 0.78rem;
+    color: var(--danger-color);
+    min-height: 1em;
+}
+
+.form-error {
+    font-size: 0.85rem;
+    color: var(--danger-color);
+    background: rgba(232, 63, 91, 0.1);
+    border: 1px solid rgba(232, 63, 91, 0.3);
+    padding: 10px 14px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+/* ===========================
+   USER BADGE (header logout)
+   =========================== */
+.user-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.btn-logout {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-logout:hover {
+    border-color: var(--danger-color);
+    color: var(--danger-color);
+}
+
+/* ===========================
+   LIMIT BANNER
+   =========================== */
+.limit-banner {
+    background: rgba(232, 63, 91, 0.1);
+    border: 1px solid rgba(232, 63, 91, 0.3);
+    color: var(--text-primary);
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin: 10px 20px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.limit-banner strong {
+    color: var(--danger-color);
+}
+
+.limit-banner small {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-secondary);
+}
+
+.limit-banner.hidden {
+    display: none;
 }
 
 * {
