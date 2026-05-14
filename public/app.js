@@ -17,7 +17,8 @@ async function waitForServer() {
             splashStatusText.textContent = RETRY_MESSAGES[Math.min(attempt, RETRY_MESSAGES.length - 1)];
             const res = await fetch('/ping', { signal: AbortSignal.timeout(8000) });
             if (res.ok) {
-                // Servidor respondeu! Fade out da splash
+                // Servidor respondeu! 
+                sessionStorage.setItem('serverAwake', 'true');
                 splashStatusText.textContent = 'Pronto! ✅';
                 // Carregar limites antes de sumir a splash
                 await checkLimits();
@@ -35,7 +36,13 @@ async function waitForServer() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    waitForServer();
+    // Se a sessão atual já sabe que o servidor acordou, pula a splash imediatamente
+    if (sessionStorage.getItem('serverAwake') === 'true') {
+        splashScreen.classList.add('hidden');
+        checkLimits(); // Carrega em background
+    } else {
+        waitForServer();
+    }
 });
 
 
@@ -94,6 +101,9 @@ request.onerror = (event) => {
     console.error('[INDEXEDDB] Erro ao abrir banco local:', event.target.error);
 };
 
+// Variáveis globais (antes de app.js principal)
+let currentLocalSessionId = null;
+
 // Salvar chunk na fila
 function saveChunkToQueue(blob, tempId, reuniaoId) {
     if (!db) return;
@@ -103,9 +113,10 @@ function saveChunkToQueue(blob, tempId, reuniaoId) {
         blob: blob,
         tempId: tempId,
         reuniaoId: reuniaoId,
+        localSessionId: currentLocalSessionId,
         timestamp: Date.now()
     });
-    console.log(`[QUEUE] Chunk salvo na fila local (tempId: ${tempId})`);
+    console.log(`[QUEUE] Chunk salvo na fila local (tempId: ${tempId}, localSessionId: ${currentLocalSessionId})`);
 }
 
 // Consumir fila e reenviar
@@ -124,6 +135,8 @@ async function processChunkQueue() {
             // Ordenar por timestamp para garantir a ordem da transcrição
             chunks.sort((a, b) => a.timestamp - b.timestamp);
 
+            const sessionMap = {}; // localSessionId -> real_id do Mongo
+
             for (const item of chunks) {
                 // Parar processamento se a internet cair no meio
                 if (!navigator.onLine) break;
@@ -131,10 +144,14 @@ async function processChunkQueue() {
                 console.log(`[QUEUE] Processando chunk pendente: ${item.tempId}`);
                 const formData = new FormData();
                 formData.append('audio', item.blob, 'chunk.webm');
-                // Adiciona o reuniaoId ao FormData para que o servidor saiba onde anexar, 
-                // caso o chunk tenha sido gerado quando já havia uma reunião.
-                if (item.reuniaoId || currentReuniaoId) {
-                    formData.append('reuniao_id', item.reuniaoId || currentReuniaoId);
+                
+                let targetReuniaoId = item.reuniaoId;
+                if (!targetReuniaoId && item.localSessionId && sessionMap[item.localSessionId]) {
+                    targetReuniaoId = sessionMap[item.localSessionId];
+                }
+
+                if (targetReuniaoId) {
+                    formData.append('reuniao_id', targetReuniaoId);
                 }
 
                 try {
@@ -155,8 +172,8 @@ async function processChunkQueue() {
                         }
 
                         // Persistir no banco após transcrição
-                        if (!currentReuniaoId) {
-                            // Criar nova reunião se for o primeiro chunk (e a reunião ainda não existir)
+                        if (!targetReuniaoId) {
+                            // Criar nova reunião se for o primeiro chunk offline
                             const saveRes = await authFetch('/salvar-reuniao', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -164,11 +181,18 @@ async function processChunkQueue() {
                             });
                             const saveData = await saveRes.json();
                             if (saveData.reuniao && saveData.reuniao._id) {
-                                currentReuniaoId = saveData.reuniao._id;
+                                targetReuniaoId = saveData.reuniao._id;
+                                if (item.localSessionId) {
+                                    sessionMap[item.localSessionId] = targetReuniaoId;
+                                    // Sincronizar o estado global caso o usuário ainda esteja na tela sem gravar
+                                    if (currentLocalSessionId === item.localSessionId && !currentReuniaoId) {
+                                        currentReuniaoId = targetReuniaoId;
+                                    }
+                                }
                             }
                         } else {
                             // Acrescentar
-                            await authFetch(`/reunioes/${currentReuniaoId}/append`, {
+                            await authFetch(`/reunioes/${targetReuniaoId}/append`, {
                                 method: 'PATCH',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ novo_texto: data.texto })
@@ -287,6 +311,9 @@ async function startRecording() {
         
         // Ativar Wake Lock imediatamente para impedir hibernação da aba no iOS
         await requestWakeLock();
+
+        // Inicializar a sessão local para a fila offline não se misturar
+        currentLocalSessionId = Date.now().toString();
 
         // Remove placeholder se existir
         const placeholder = transcricaoResult.querySelector('.placeholder');
@@ -670,21 +697,29 @@ saveBtn.addEventListener('click', async () => {
         tempSpans.forEach(span => span.remove());
         
         const textToSave = resultClone.innerText.trim();
+        const hasQueuedChunks = transcricaoResult.querySelectorAll('.queued').length > 0;
+        
         if (!textToSave || textToSave === 'A transcrição aparecerá aqui...') {
-            alert('Não há transcrição para salvar.');
-            return;
-        }
-
-        try {
-            statusText.textContent = 'Salvando no histórico...';
-            await authFetch('/salvar-reuniao', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ conteudo_transcrito: textToSave })
-            });
-        } catch(e) {
-            console.error('[CLIENT] Erro ao salvar no BD:', e);
-            alert('Erro ao salvar no banco.');
+            if (hasQueuedChunks) {
+                // Deixa a fila offline resolver no background e apenas avisa
+                statusText.textContent = 'Salvo na fila offline! ⏳';
+            } else {
+                alert('Não há transcrição para salvar.');
+                return;
+            }
+        } else {
+            try {
+                statusText.textContent = 'Salvando no histórico...';
+                await authFetch('/salvar-reuniao', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conteudo_transcrito: textToSave })
+                });
+            } catch(e) {
+                console.error('[CLIENT] Erro ao salvar no BD:', e);
+                // Mesmo com erro de rede, se caiu aqui, a UI deve liberar
+                alert('Erro ao sincronizar. O app tentará novamente em background.');
+            }
         }
     }
 
