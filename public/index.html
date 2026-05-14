@@ -16,7 +16,10 @@
     <div class="app-container">
         <header>
             <div class="header-content">
-                <h1>Berbert Transcriptor</h1>
+                <div style="display: flex; align-items: baseline;">
+                    <h1>Berbert Transcriptor</h1>
+                    <span id="app-version-display" style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 10px;"></span>
+                </div>
                 <button id="historyBtn" class="btn secondary small">Ver Histórico</button>
             </div>
             <p class="subtitle">Transcrição contínua com IA</p>
@@ -56,6 +59,7 @@
         </main>
     </div>
 
+    <script src="version.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

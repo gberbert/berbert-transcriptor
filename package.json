@@ -1,6 +1,6 @@
 {
   "name": "berbert-transcriptor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Aplicativo PWA para gravação e transcrição de reuniões usando o Gemini.",
   "main": "server.js",
   "scripts": {
