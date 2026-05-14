@@ -32,8 +32,8 @@ function updateTimer() {
     timerElement.textContent = `${hrs}:${mins}:${secs}`;
 }
 
-// RENDER FREE TIER OPTIMIZATION: Chunk de 3 minutos em milissegundos
-const CHUNK_TIME_MS = 180000; 
+// RENDER FREE TIER OPTIMIZATION: Chunk de 1 minuto em milissegundos
+const CHUNK_TIME_MS = 60000; 
 
 // Função para impedir que a tela apague no iOS
 async function requestWakeLock() {
@@ -96,8 +96,11 @@ async function startRecording() {
         // UI Updates
         mainControls.classList.remove('hidden');
         postRecordControls.classList.add('hidden');
-        startBtn.classList.add('hidden');
-        stopBtn.classList.remove('hidden');
+        // Adiciona efeito de pulso no botão principal
+        startBtn.classList.add('recording');
+        // Habilita o botão de parar
+        stopBtn.disabled = false;
+        
         statusIndicator.classList.add('recording');
         statusText.textContent = 'Gravando...';
         
@@ -130,6 +133,8 @@ stopBtn.addEventListener('click', () => {
     mainControls.classList.add('hidden');
     postRecordControls.classList.remove('hidden');
     statusIndicator.classList.remove('recording');
+    startBtn.classList.remove('recording');
+    stopBtn.disabled = true;
     statusText.textContent = 'Gravação pausada';
 });
 
@@ -159,20 +164,11 @@ saveBtn.addEventListener('click', async () => {
         alert('Erro ao salvar no banco. Baixando o arquivo de texto.');
     }
 
-    // Download do arquivo TXT localmente
-    const blob = new Blob([textToSave], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `transcricao_berbert_${new Date().toISOString().slice(0,10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-
     // Resetar UI para novo uso
     mainControls.classList.remove('hidden');
     postRecordControls.classList.add('hidden');
-    startBtn.classList.remove('hidden');
-    stopBtn.classList.add('hidden');
+    startBtn.classList.remove('recording');
+    stopBtn.disabled = true;
     
     timerElement.classList.add('hidden');
     timerElement.textContent = '00:00:00';

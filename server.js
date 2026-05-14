@@ -25,6 +25,17 @@ const reuniaoSchema = new mongoose.Schema({
 });
 const Reuniao = mongoose.model('Reuniao', reuniaoSchema);
 
+// Definir Schema de Resumo
+const resumoSchema = new mongoose.Schema({
+    reuniao_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Reuniao' },
+    titulo_reuniao: String,
+    tipo: String,
+    prompt: String,
+    texto_resumo: String,
+    data_geracao: { type: Date, default: Date.now }
+});
+const Resumo = mongoose.model('Resumo', resumoSchema);
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -157,6 +168,122 @@ app.post('/transcrever', upload.single('audio'), async (req, res) => {
                 console.error(`[CLEANUP ERROR] Failed to delete remote file:`, err);
             }
         }
+    }
+});
+
+// ==================
+// ROTAS DE RESUMO
+// ==================
+
+// 1. Gerar e Salvar Resumo
+app.post('/gerar-resumo', async (req, res) => {
+    if (!process.env.MONGO_URI || !process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: 'Falta configuração de banco de dados ou chave de API.' });
+    }
+
+    try {
+        const { reuniao_id, tipo, prompt_extra } = req.body;
+        
+        // Buscar a transcrição no banco de dados
+        const reuniao = await Reuniao.findById(reuniao_id);
+        if (!reuniao) {
+            return res.status(404).json({ error: 'Reunião não encontrada no banco de dados.' });
+        }
+
+        const transcricao = reuniao.conteudo_transcrito;
+        
+        // Montar o Prompt Baseado no Tipo
+        let systemInstruction = "";
+        if (tipo === "Reunião") {
+            systemInstruction = "Você é um assistente executivo especializado em analisar transcrições de reuniões. Extraia os pontos principais, as decisões tomadas e os próximos passos (action items).";
+        } else if (tipo === "Palestra") {
+            systemInstruction = "Você é um professor especializado em sumarizar palestras. Crie um resumo estruturado destacando o tema principal, as ideias centrais abordadas e uma conclusão clara.";
+        } else {
+            systemInstruction = "Você é um assistente especialista em resumir textos.";
+        }
+
+        let userPrompt = `Abaixo está a transcrição de um áudio.\n\n[TRANSCRIÇÃO]:\n${transcricao}\n\n`;
+        if (prompt_extra && prompt_extra.trim().length > 0) {
+            userPrompt += `\n[INSTRUÇÕES EXTRAS DO USUÁRIO]:\n${prompt_extra}\n`;
+        }
+        
+        userPrompt += "\nPor favor, gere o resumo conforme as instruções.";
+
+        console.log(`[API] Gerando resumo para reunião ID ${reuniao_id} (Tipo: ${tipo})`);
+
+        // Chamada direta para o Gemini Text (Flash)
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.5-flash",
+            systemInstruction: systemInstruction
+        });
+
+        const result = await model.generateContent(userPrompt);
+        const resumoTexto = result.response.text();
+
+        // Salvar o resumo gerado no banco de dados
+        const novoResumo = new Resumo({
+            reuniao_id: reuniao._id,
+            titulo_reuniao: reuniao.titulo,
+            tipo: tipo,
+            prompt: prompt_extra,
+            texto_resumo: resumoTexto
+        });
+        
+        await novoResumo.save();
+        res.json({ success: true, resumo: novoResumo });
+
+    } catch (err) {
+        console.error('[API ERROR] Erro ao gerar resumo:', err);
+        res.status(500).json({ error: 'Erro ao gerar ou salvar o resumo.' });
+    }
+});
+
+// 2. Listar Resumos
+app.get('/resumos', async (req, res) => {
+    try {
+        const resumos = await Resumo.find().sort({ data_geracao: -1 });
+        res.json(resumos);
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao listar resumos:', err);
+        res.status(500).json({ error: 'Erro ao buscar resumos.' });
+    }
+});
+
+// 3. Editar Resumo
+app.put('/resumos/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { texto_resumo } = req.body;
+        
+        const resumoAtualizado = await Resumo.findByIdAndUpdate(
+            id, 
+            { texto_resumo }, 
+            { new: true } // Retorna o documento já atualizado
+        );
+        
+        if (!resumoAtualizado) {
+            return res.status(404).json({ error: 'Resumo não encontrado.' });
+        }
+        res.json({ success: true, resumo: resumoAtualizado });
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao atualizar resumo:', err);
+        res.status(500).json({ error: 'Erro ao atualizar o resumo.' });
+    }
+});
+
+// 4. Excluir Resumo
+app.delete('/resumos/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resumoDeletado = await Resumo.findByIdAndDelete(id);
+        
+        if (!resumoDeletado) {
+            return res.status(404).json({ error: 'Resumo não encontrado.' });
+        }
+        res.json({ success: true, message: 'Resumo excluído com sucesso.' });
+    } catch (err) {
+        console.error('[DATABASE ERROR] Erro ao excluir resumo:', err);
+        res.status(500).json({ error: 'Erro ao excluir o resumo.' });
     }
 });
 

@@ -6,7 +6,17 @@ const detailContent = document.getElementById('detail-content');
 const backToListBtn = document.getElementById('backToList');
 const loadingIndicator = document.getElementById('loading');
 
+// Modal Elements
+const summaryModal = document.getElementById('summaryModal');
+const btnOpenSummaryModal = document.getElementById('btnOpenSummaryModal');
+const btnCloseSummaryModal = document.getElementById('btnCloseSummaryModal');
+const summaryType = document.getElementById('summaryType');
+const summaryPrompt = document.getElementById('summaryPrompt');
+const btnSubmitSummary = document.getElementById('btnSubmitSummary');
+const summaryLoadingText = document.getElementById('summaryLoadingText');
+
 let reunioesCache = [];
+let reuniaoAtual = null;
 
 async function loadHistory() {
     try {
@@ -54,6 +64,8 @@ function openDetail(index) {
     const reuniao = reunioesCache[index];
     if (!reuniao) return;
     
+    reuniaoAtual = reuniao;
+    
     detailTitle.textContent = reuniao.titulo || 'Reunião Sem Título';
     detailDate.textContent = new Date(reuniao.data_reuniao).toLocaleString('pt-BR');
     detailContent.textContent = reuniao.conteudo_transcrito;
@@ -65,6 +77,56 @@ function openDetail(index) {
 backToListBtn.addEventListener('click', () => {
     // Animação de saída
     historyDetail.classList.remove('visible');
+    reuniaoAtual = null;
+});
+
+// Lógica do Modal de Resumo
+btnOpenSummaryModal.addEventListener('click', () => {
+    summaryModal.classList.remove('hidden');
+});
+
+btnCloseSummaryModal.addEventListener('click', () => {
+    summaryModal.classList.add('hidden');
+    summaryLoadingText.classList.add('hidden');
+});
+
+btnSubmitSummary.addEventListener('click', async () => {
+    if (!reuniaoAtual) return;
+    
+    const tipo = summaryType.value;
+    const prompt_extra = summaryPrompt.value;
+    
+    btnSubmitSummary.disabled = true;
+    summaryLoadingText.classList.remove('hidden');
+    
+    try {
+        const response = await fetch('/gerar-resumo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                reuniao_id: reuniaoAtual._id,
+                tipo: tipo,
+                prompt_extra: prompt_extra
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Sucesso!
+        alert('Resumo gerado com sucesso!');
+        summaryModal.classList.add('hidden');
+        window.location.href = 'resumos.html'; // Redireciona para a nova tela
+        
+    } catch (e) {
+        alert('Erro ao gerar resumo: ' + e.message);
+    } finally {
+        btnSubmitSummary.disabled = false;
+        summaryLoadingText.classList.add('hidden');
+    }
 });
 
 // Carregar o histórico automaticamente quando a página abrir
