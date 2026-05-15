@@ -2,6 +2,18 @@
 // AUTH HELPER GLOBAL
 // =====================
 
+// REGISTRO DO SERVICE WORKER (Para Cache PWA e evitar 503 do Render)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+            console.log('Service Worker registrado com sucesso na tela de login: ', reg.scope);
+        }).catch(err => {
+            console.error('Falha ao registrar Service Worker:', err);
+        });
+    });
+}
+
+
 const AUTH_TOKEN_KEY = 'plaubert_token';
 const AUTH_EMAIL_KEY = 'plaubert_email';
 
